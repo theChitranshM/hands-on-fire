@@ -7,7 +7,7 @@ Judgment calls the brief didn't cover. Simplest option that keeps the illusion c
 - **Projector native resolution (R2):** SGD SX8 (the Kimwood) gets 1920x1080 @ 60 Hz over HDMI, and 1px line gratings stay sharp on the wall (tested 2026-11-05), so the panel really is 1080p. Rendering is native 1920x1080 (`display.max_render_size`). Effects bench on the projector: 231 fps average with vsync off and ~45k particles, so 60 fps has wide headroom.
 - **Throw distance that reads on camera (R1):** _pending: fill in after the dark-room test._
 - **Tracking light (R3):** _pending: projected light only / warm lamp / IR. Fill in._
-- **Measured latency (R4):** _pending: `tools/latency_test.py` writes `calibration/latency.json`._
+- **Measured latency (R4):** 2026-11-06, FaceTime camera at 29.5 fps into the SGD SX8: median 174 ms, p95 204 ms, min 137 ms (50/50 trials). **Above the 150 ms line.** `predict_max_ms` was raised from 140 to 230 so prediction can cover the full lag instead of being clipped. Re-test after turning off projector processing (00:16): median 172 ms, p95 222 ms. No change, so the SX8's lag is fixed in hardware. **Decision: accept it and choreograph slowly.** Move the hands smoothly with no sudden stops, give each gesture about 1 s, and make the launch a steady lift rather than a flick. Prediction covers the steady part of a movement; only sudden direction changes show the lag.
 - **Hand pose (R5):** _pending: palm vs back of hand, with dark sleeve._
 
 ## Architecture
@@ -43,3 +43,11 @@ Judgment calls the brief didn't cover. Simplest option that keeps the illusion c
 
 ## Audio
 - **sounddevice (PortAudio) instead of pygame.mixer.** OpenCV's wheel bundles its own SDL2. pygame loaded a second copy, and macOS warned about duplicate classes ("may cause mysterious crashes"). That risk isn't acceptable mid-take. Sounds are mixed in a small callback: fire-and-forget voices plus fading loops.
+
+## First real run (2026-11-06): what the footage showed, and the fixes
+- **Tracking:** the take footage showed hands only ~50–100 px wide in a dark frame, and 23 "tracking lost" clips in about 3 minutes. Replaying MediaPipe over that footage: baseline found a hand in 18% of frames. Brightening shadows first (gamma 0.55) raised that to 37%, and loosening the confidence thresholds to 0.3 raised it to **45%**. Cropping to the projector area and CLAHE didn't help. Shipped gamma 0.55 + 0.3 thresholds, and the README now says to stand 1–1.5 m from the camera, which is the bigger lever.
+- **The footage logger burns the tracking skeleton into the camera half** of take and glitch clips, so a fail is self-explaining (and better B-roll).
+- **Realism:**
+  - **Diya:** real proportions (~5 cm flame, ~7 cm bowl on a ~9.5 cm palm). It rests in the palm hollow, with the wick lifted by half the bowl height, and stays level with gravity whatever the hand angle.
+  - **Sparkler:** gripped at the bottom of a ~22 cm wire that points along the hand, tilted up. The burning point is at the far end and creeps toward the fingers over ~45 s. A short glowing just-burnt section sits under the ball, with a faint grey stick down to the grip. The core is a small white point with thin radiating streaks, not a blob.
+  - **Cupped catch:** the same real-size diya settles into the cup.

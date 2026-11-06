@@ -5,7 +5,7 @@ Every beat can be forced with the keyboard; the log records how each beat was re
 """
 import time
 import numpy as np
-from .types import THUMB_TIP, INDEX_TIP
+from .types import THUMB_TIP, INDEX_TIP, INDEX_MCP, WRIST
 
 # (number, name, trigger gesture or None for auto/none, minimum seconds in previous beat before it can fire)
 BEATS = [
@@ -218,11 +218,15 @@ class Sequence:
             return (hs[0].palm + hs[1].palm) / 2
         return hs[0].palm if hs else None
 
+    def _seat(self, palm, size):
+        """Wick position for a diya resting in the palm hollow: the bowl's centre sits on the palm, so the wick
+        is lifted by half the bowl's height, straight up (gravity), whatever angle the hand is at."""
+        return np.asarray(palm) - np.array([0.0, self.cfg.render.flame.seat_frac * size])
+
     def _palm_diya(self, intensity, flare=0.0, glow=1.0, calm=0.0, embers=1.0):
         h = self._hand()
         if h is not None:
-            # the diya sits on the palm slightly towards the fingers, lifted against tracking jitter
-            self.last_palm = (tuple(h.palm), h.size)
+            self.last_palm = (tuple(self._seat(h.palm, h.size)), h.size)
             intensity *= h.presence
         if self.last_palm is None:
             return
@@ -241,8 +245,10 @@ class Sequence:
             active = h is not None and spark_int > 0.01
             pos = (h.proj[THUMB_TIP] + h.proj[INDEX_TIP]) / 2 if h is not None else (0, 0)
             vel = h.vel if h is not None else (0, 0)
+            point = (h.proj[INDEX_MCP] - h.proj[WRIST]) if h is not None else None   # where the hand points
             fx["sparklers"][label].update(dt, tuple(pos), tuple(vel), active,
-                                          spark_int * (h.presence if h is not None else 0))
+                                          spark_int * (h.presence if h is not None else 0), direction=point,
+                                          length=h.size * self.cfg.render.sparkler.stick_palm_frac if h is not None else None)
         if self.audio:
             self.audio.loop("sparkler_loop", spark_int > 0.05, volume=spark_int)
         fx["particles"].update(dt)
@@ -266,10 +272,10 @@ class Sequence:
             if mid is not None:
                 pres = min(h.presence for h in self.tf.hands.values())
                 if b == 5:
-                    fx["flames"].add(tuple(mid), self._mean_size() * 1.2, _ease(t_in / 0.5) * pres,
+                    fx["flames"].add(tuple(self._seat(mid, self._mean_size())), self._mean_size(), _ease(t_in / 0.5) * pres,
                                      flare=max(0.0, 1 - t_in / 0.4) * 0.6, diya=True, seed=3.0)
                 else:  # flame has left with the rocket; the empty diya cools down
-                    fx["flames"].add(tuple(mid), self._mean_size() * 1.2, 0.0, diya=True, seed=3.0)
+                    fx["flames"].add(tuple(self._seat(mid, self._mean_size())), self._mean_size(), 0.0, diya=True, seed=3.0)
         elif b == 10:
             q = self.sc
             fade = 1.0 if t_in < q.quiet_hold_s else max(0.0, 1 - (t_in - q.quiet_hold_s) / q.quiet_fade_s)

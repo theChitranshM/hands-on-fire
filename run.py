@@ -21,7 +21,7 @@ from hof.sequence import Sequence, DONE, BEATS
 from hof.mapping import Mapping
 from hof.tracker import load_latency
 from hof.types import Hand, TrackFrame, TIPS, THUMB_TIP
-from hof.hud import render_hud
+from hof.hud import render_hud, draw_hands
 
 
 class SimTracker:
@@ -265,7 +265,11 @@ def main():
             if recorder:
                 if now - last_push >= 1.0 / cfg.recorder.record_fps:
                     last_push = now
-                    recorder.push(engine.grab(tuple(cfg.recorder.proj_size)), tf.image, now)
+                    cam = tf.image
+                    if cam is not None and tf.hands:      # burn the tracking skeleton into the footage: shows what failed
+                        cam = cam.copy()
+                        draw_hands(cam, tf)
+                    recorder.push(engine.grab(tuple(cfg.recorder.proj_size)), cam, now)
                 if in_show and engine.fps < cfg.recorder.fps_glitch_below and now - start > 3:
                     low_fps_since = low_fps_since or now
                     if now - low_fps_since > 0.5:
@@ -279,7 +283,7 @@ def main():
                         recorder.glitch("tracking_lost", f"beat {seq.beat} {seq.name}")
                 if not plumbing_logged and engine.is_projector and tf.image is not None:
                     plumbing_logged = True
-                    recorder.milestone("plumbing", "Projector and iPhone camera both live from the Mac")
+                    recorder.milestone("plumbing", "Projector and camera both live from the Mac")
 
             if hud_on and now - last_hud >= 1.0 / cfg.display.hud_fps:
                 last_hud = now

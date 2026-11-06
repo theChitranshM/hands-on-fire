@@ -24,17 +24,18 @@ camera:
 tracker:
   model: assets/models/hand_landmarker.task
   num_hands: 2
-  min_detection_confidence: 0.5
-  min_presence_confidence: 0.5
-  min_tracking_confidence: 0.5
+  min_detection_confidence: 0.3    # dark room: footage test 18% (0.5) -> 45% (0.3 + gamma) of frames with a hand
+  min_presence_confidence: 0.3
+  min_tracking_confidence: 0.3
   swap_handedness: true       # MediaPipe assumes a selfie (mirrored) image; our camera is not mirrored
+  gamma: 0.55                 # brighten shadows before tracking (1 = off). 0.40 and 0.55 tie on footage; 0.70 is worse
   one_euro:
     min_cutoff: 1.2           # Hz. lower = smoother at rest
     beta: 0.02                # higher = less lag when moving fast
     d_cutoff: 1.0
   predict: true
   predict_extra_ms: 8         # render-to-swap time: the frame shows at the next vsync, about half a frame later
-  predict_max_ms: 140         # never extrapolate further than this
+  predict_max_ms: 230         # R4: measured 174 ms median camera-to-photon (+inference), so the cap must exceed that
   predict_vel_damping: 0.85   # 1 = full linear extrapolation
   loss_hold_ms: 120           # hold last pose this long before fading
   loss_fade_ms: 200           # then fade presence to 0 over this
@@ -96,7 +97,7 @@ render:
     radius: 1.0                 # blur tap spacing multiplier (bigger = wider, softer)
     weights: [0.35, 0.45, 0.5, 0.55]   # per level, 1/2 .. 1/16 resolution
   flame:
-    size_palm_frac: 1.0         # flame height relative to palm size (chunky: thin detail vanishes on this projector)
+    size_palm_frac: 0.55        # flame height in palm sizes: a real diya flame is ~5 cm on a ~9.5 cm palm
     flicker_speed: 1.0
     glow: 1.0
     core_color: [1.0, 0.95, 0.75]
@@ -114,7 +115,8 @@ render:
     halo_radius: 1.3            # glow halo radius, in flame heights
     halo_gain: 0.6
     flare_scale: 0.65           # extra flame height at flare=1
-    diya_size_frac: 1.25        # diya width relative to flame height
+    diya_size_frac: 1.35        # bowl width relative to flame height (~7 cm clay diya)
+    seat_frac: 0.16             # wick lifted above the palm centre (palm sizes) so the bowl rests in the palm hollow
     diya_gain: 0.8
     rim_color: [1.0, 0.78, 0.38]
     oil_color: [1.0, 0.68, 0.2]
@@ -142,12 +144,12 @@ render:
     ember_size: 0.085           # glow radius in flame heights
     ember_gain: 1.3
   sparkler:
-    rate: 700                   # sparks per second per sparkler
-    speed: 420                  # px/s
-    life: [0.25, 0.7]
+    rate: 380                   # sparks per second per sparkler
+    speed: 600                  # px/s
+    life: [0.18, 0.55]
     gravity: 900
     drag: 2.2
-    size: 3.0
+    size: 2.0
     color_hot: [0.9, 0.68, 0.32]
     color_cool: [0.95, 0.38, 0.07]
     twinkle: 0.6
@@ -156,17 +158,27 @@ render:
     star_frac: 0.14             # fraction of sparks that are bright star sparks, splitting into 3-5 tiny ones when they die
     star_color: [1.0, 0.97, 0.8]
     big_frac: 0.04              # fraction of extra big white sparks
-    core_radius: 6.0            # burning point glow radius px
+    core_radius: 3.5            # burning point glow radius px
     core_gain: 1.2
     halo_color: [1.0, 0.6, 0.2]
     halo_gain: 0.15
-    wire_len: 70                # glowing wire below the burning point, px
+    # held like a real phuljhadi: pinched at the bottom, wire angled up along the hand, burning at the far end
+    stick_palm_frac: 2.3        # wire length in palm sizes (~22 cm on a real hand)
+    grip_up_blend: 0.45         # 0 = wire continues the wrist->fingers line, 1 = straight up
+    dir_rate: 6.0               # 1/s smoothing of the wire direction
+    burn_s: 45                  # time to burn down by burn_travel (real sparklers ~40-60 s)
+    burn_travel: 0.45           # fraction of the wire that burns away during a long hold
+    relight_after_s: 2.0        # a new sparkler after this long unlit
+    hot_frac: 0.22              # glowing just-burnt section below the ball, fraction of remaining length
     wire_dots: 9
-    wire_width: 4.0             # px (glow dots, so bolder than it looks)
+    wire_width: 3.0             # px (glow dots, so bolder than it looks)
     wire_color: [1.0, 0.45, 0.12]
     wire_gain: 1.2
-    wire_lean: 0.05             # wire tilts against hand velocity (rad per px/s) ...
-    wire_max_tilt: 0.45         # ... up to this many rad
+    stick_dots: 44
+    stick_color: [0.55, 0.42, 0.32]   # the unburnt grey coating, faintly lit
+    stick_gain: 0.55
+    ash_color: [0.6, 0.12, 0.03]
+    ash_gain: 0.35
   particles:
     fade_in_s: 0.03             # default fade-in for sparks; bursts pass their own (fireworks.burst_fade)
     max: 60000

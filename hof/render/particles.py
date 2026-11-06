@@ -180,27 +180,51 @@ class ParticleSystem:
 
 
 class Sparkler:
-    """A phuljhadi: white-hot burning point, fine gold sparks, bright star sparks that split into 3-5 tiny ones, a glowing wire."""
+    """A phuljhadi held like the real thing: pinched at the bottom of the wire, which points up and out along the hand;
+    the white-hot burning point sits at the far end and creeps down toward the fingers as it burns."""
 
     def __init__(self, particles, cfg):
         self.p = particles
         self.c = cfg.render.sparkler
-        self.pos = None
+        self.pos = None          # burning point (where sparks come from)
+        self.grip = None
         self.active = False
         self.intensity = 0.0
         self._acc = 0.0
         self._last = None
         self._t = 0.0
-        self._tilt = 0.0
+        self._dir = np.array([0.0, -1.0], "f4")
+        self._len = 0.0
+        self._burn = 0.0         # 0 = fresh, 1 = burnt down by burn_travel of its length
+        self._idle = 0.0
 
-    def update(self, dt, pos, vel, active, intensity=1.0):
-        """pos = pinch point px; vel = hand velocity px/s. Emits sparks while active."""
+    def update(self, dt, pos, vel, active, intensity=1.0, direction=None, length=None):
+        """pos = grip (thumb-index pinch) px; vel = hand velocity px/s; direction = unit vector the hand points
+        (wrist -> fingers); length = wire length px. Emits sparks from the burning end while active."""
         c = self.c
         self._t += dt
         self.active = bool(active) and intensity > 0.0
         self.intensity = float(intensity)
-        pos = np.asarray(pos, dtype="f4")
-        self._tilt += (float(np.clip(-vel[0] * c.wire_lean, -c.wire_max_tilt, c.wire_max_tilt)) - self._tilt) * min(1.0, dt * 8)
+        grip = np.asarray(pos, dtype="f4")
+        self.grip = grip
+        if direction is not None:
+            d = np.asarray(direction, "f4")
+            d = d / max(float(np.linalg.norm(d)), 1e-3)
+            d = d * (1 - c.grip_up_blend) + np.array([0.0, -1.0], "f4") * c.grip_up_blend   # held angled upward
+            d = d / max(float(np.linalg.norm(d)), 1e-3)
+            k = min(1.0, dt * c.dir_rate)
+            self._dir = self._dir * (1 - k) + d * k
+            self._dir /= max(float(np.linalg.norm(self._dir)), 1e-3)
+        if length is not None:
+            self._len = float(length)
+        if self.active:
+            if self._idle > c.relight_after_s:
+                self._burn = 0.0
+            self._idle = 0.0
+            self._burn = min(1.0, self._burn + dt / c.burn_s)
+        else:
+            self._idle += dt
+        pos = grip + self._dir * self._len * (1.0 - c.burn_travel * self._burn)
         if not self.active or dt <= 0:
             self._last = None
             self._acc = 0.0
@@ -246,10 +270,20 @@ class Sparkler:
         flame_renderer.add_glow(self.pos, c.core_radius * 2.6, color=tuple(c.halo_color), intensity=c.halo_gain * I * fl)   # wide halo
         flame_renderer.add_glow(self.pos, c.core_radius * (0.9 + 0.15 * fl), color=tuple(c.color_cool), intensity=c.core_gain * I * fl)
         flame_renderer.add_glow(self.pos, c.core_radius * 0.55, color=(1.0, 1.0, 1.0), intensity=c.core_gain * 1.2 * I * fl)  # white-hot centre
-        ang = np.pi / 2 + self._tilt
-        d = np.array([np.cos(ang), np.sin(ang)], "f4")
+        if self.grip is None or self._len <= 0:
+            return
+        d = self._dir
+        burn_len = self._len * (1.0 - c.burn_travel * self._burn)
         m = int(c.wire_dots)
-        for i in range(1, m + 1):
+        for i in range(1, m + 1):      # just-burnt wire right below the ball glows red-orange and cools toward the fingers
             u = i / m
-            flame_renderer.add_glow(self.pos + d * c.wire_len * u, c.wire_width * (1.0 - 0.3 * u), color=tuple(c.wire_color),
-                                    intensity=c.wire_gain * I * (1.0 - u) ** 1.5 * (0.8 + 0.2 * fl))
+            flame_renderer.add_glow(self.pos - d * burn_len * c.hot_frac * u, c.wire_width * (1.0 - 0.3 * u),
+                                    color=tuple(c.wire_color), intensity=c.wire_gain * I * (1.0 - u) ** 1.5 * (0.8 + 0.2 * fl))
+        k = int(c.stick_dots)
+        for i in range(k):             # the rest of the stick down to the grip, faintly lit by its own sparks
+            u = (i + 0.5) / k
+            flame_renderer.add_glow(self.grip + d * burn_len * (1.0 - c.hot_frac) * u, c.wire_width * 0.6,
+                                    color=tuple(c.stick_color), intensity=c.stick_gain * I * (0.4 + 0.6 * u))
+        for i in range(1, 4):          # spent wire beyond the ball (already burnt), a dull dying red
+            flame_renderer.add_glow(self.pos + d * self._len * c.burn_travel * self._burn * i / 3, c.wire_width * 0.7,
+                                    color=tuple(c.ash_color), intensity=c.ash_gain * I * (1 - i / 4))

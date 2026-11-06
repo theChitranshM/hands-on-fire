@@ -63,6 +63,21 @@ If macOS says the file "can't be opened because it's from an unidentified develo
 4. **Latency:** `launch/latency.command`. It flashes the projector 50 times and times how long the camera takes to see it. Prediction uses this number.
 5. **Show:** `launch/show.command`.
 
+## How to stand and hold things
+
+The light is drawn the way the real objects sit, so move the way you'd hold the real thing:
+
+- **Stand close:** about **1–1.5 m** from the camera and projector. Your hands need to be big in the camera frame. From across the room the tracker keeps losing them, and the projection is dimmer too.
+- **Diya:** palm open and cupped slightly, tilted toward the projector at chest height, like offering a diya to someone. The clay diya sits in the hollow of your palm with its flame always pointing straight up, however your hand turns. Move it slowly; a real flame would blow out if you swung it.
+- **Snuff:** close your fingers over it, slowly.
+- **Sparklers (phuljhadi):** pinch thumb and index finger as if holding the bottom end of the wire. The wire runs up from your fingers along the direction your hand points, burning at the far tip, and the burning point creeps down toward your fingers as it burns. Tilt your hands up and out like you would with a real one, and draw slow arcs: the sparks trail behind.
+- **Diya catch:** bring both hands together into a cup, as if receiving a diya. It settles into the cup.
+- **Launch:** lift the cupped hands upward in one steady motion. Don't flick.
+- **Finale:** open your arms wide, slowly.
+- **Quiet end:** hold one palm still with the diya and let everything else fade.
+
+This projector shows the image about 170 ms after the camera sees your hand. The software predicts where your hand is going, so smooth, steady movement keeps the light locked on; only sudden stops show the lag.
+
 ## The show
 
 About 15 seconds, all driven by gestures. **Every beat also has a keyboard key**, so a missed gesture never ruins a take.
