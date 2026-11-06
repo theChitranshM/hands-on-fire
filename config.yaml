@@ -1,0 +1,378 @@
+# Hands on Fire — every tunable lives here. Code reads these; no magic numbers.
+
+display:
+  projector_monitor: auto     # auto = first non-primary monitor; or an index into glfw monitors; or a name substring
+  render_size: auto           # auto = min(projector mode, max_render_size); or [w, h] to force (R2 result goes here)
+  max_render_size: [1920, 1080]  # R2: SGD SX8 resolves 1px lines at 1920x1080, so render native
+  fallback_windowed: true     # no projector attached -> open a 960x540 window on the Mac screen instead
+  vsync: true
+  hud_size: [1280, 760]
+  hud_fps: 20
+  hud_on_start: true          # operator view on the laptop; H hides/shows it
+
+camera:
+  device: "FaceTime"          # Mac built-in camera (name substring from tools/list_devices.py) or an integer index
+  fallback_device: 0          # used if the named device is missing
+  width: 1280
+  height: 720
+  fps: 30                     # built-in FaceTime camera tops out at 30; prediction covers the gap
+  lock_exposure: true         # best effort; OpenCV/AVFoundation often ignores these
+  exposure: -6
+  lock_focus: true
+  mirror: false               # do not mirror; mapping handles geometry
+
+tracker:
+  model: assets/models/hand_landmarker.task
+  num_hands: 2
+  min_detection_confidence: 0.5
+  min_presence_confidence: 0.5
+  min_tracking_confidence: 0.5
+  swap_handedness: true       # MediaPipe assumes a selfie (mirrored) image; our camera is not mirrored
+  one_euro:
+    min_cutoff: 1.2           # Hz. lower = smoother at rest
+    beta: 0.02                # higher = less lag when moving fast
+    d_cutoff: 1.0
+  predict: true
+  predict_extra_ms: 8         # render-to-swap time: the frame shows at the next vsync, about half a frame later
+  predict_max_ms: 140         # never extrapolate further than this
+  predict_vel_damping: 0.85   # 1 = full linear extrapolation
+  loss_hold_ms: 120           # hold last pose this long before fading
+  loss_fade_ms: 200           # then fade presence to 0 over this
+  slot_match_px: 0.25         # max jump (fraction of camera width) to keep a hand in its slot
+  handedness_ema: 0.15        # how fast a slot's left/right label can change
+
+latency:
+  default_ms: 90              # used until tools/latency_test.py writes calibration/latency.json
+  trials: 50
+  file: calibration/latency.json
+
+mapping:
+  file: calibration/homography.json
+  grid: [7, 5]                # dots projected during calibration (cols, rows)
+  dot_radius_px: 14
+  margin_frac: 0.12
+  offset_px: [0, 0]           # live nudge for hand-depth parallax, set with arrow keys in calibrate verify mode
+
+gestures:
+  on_threshold: 0.70
+  off_threshold: 0.45
+  min_hold_ms:
+    open_palm: 180
+    fist: 150
+    pinch: 150
+    cupped: 220
+    raise: 60
+    palms_together: 250
+    arms_wide: 250
+    still: 1000
+  finger_extended_ratio: 1.15   # tip-to-wrist / pip-to-wrist above this = extended
+  pinch_ratio: 0.38             # thumb-index distance / palm size below this = pinch
+  cupped_max_dist: 1.6          # palm-centre distance / palm size
+  palms_together_max_dist: 0.9
+  raise_speed: 1.1              # palm sizes per second upward (camera space)
+  arms_wide_frac: 0.55          # horizontal hand separation / camera width
+  still_speed: 0.25             # palm sizes per second below this = still
+
+sequence:
+  gestures_enabled: true
+  rangoli_enabled: true         # CUT if R1 brightness test says thin visuals don't read
+  launch_flight_s: 1.0          # rocket flight time before the burst
+  firework_hold_s: 2.5          # how long beat 7 plays before beat 8/9 can trigger
+  finale_min_s: 3.0             # finale plays at least this long before "still" can end it
+  quiet_hold_s: 4.0
+  quiet_fade_s: 2.0
+  firework_target_frac: [0.5, 0.18]   # where the burst lands in projector space (x, y as fraction)
+  quiet_trail_fade_s: 1.2       # beat 10: leftover sparks and embers fade out this fast, leaving only the diya
+
+render:
+  brightness: 1.0               # global multiplier, applied last
+  scale: 1.0                    # global effect size multiplier
+  trail_decay: 0.82             # per-frame persistence of the particle trail layer (0 = no trails)
+  background: [0, 0, 0]         # keep pure black
+  bloom:                        # soft halos around everything bright (also lights the skin around an effect)
+    strength: 0.38              # 0 = off
+    threshold: 0.85             # level (post-brightness) above which light starts to bloom
+    knee: 0.5                   # soft shoulder width of the threshold
+    radius: 1.0                 # blur tap spacing multiplier (bigger = wider, softer)
+    weights: [0.35, 0.45, 0.5, 0.55]   # per level, 1/2 .. 1/16 resolution
+  flame:
+    size_palm_frac: 1.0         # flame height relative to palm size (chunky: thin detail vanishes on this projector)
+    flicker_speed: 1.0
+    glow: 1.0
+    core_color: [1.0, 0.95, 0.75]
+    body_color: [1.0, 0.55, 0.12]
+    tip_color: [0.9, 0.2, 0.05]
+    diya_color: [0.92, 0.36, 0.12]
+    relight_flare: 1.3          # peak flare of the relight (beat 3)
+    quiet_embers: 2.4           # beat 10: slow floating embers rate multiplier
+    quiet_glow: 1.9             # beat 10: palm pool + halo gain of the last diya
+    relight_sparks: 90          # sparks puffed off the wick on relight
+    relight_speed: [140, 460]
+    max: 24                     # max simultaneous flames / diyas
+    flicker_height: 0.10        # height wobble amplitude
+    flicker_sway: 0.22          # sideways lean amplitude (fraction of flame height)
+    halo_radius: 1.3            # glow halo radius, in flame heights
+    halo_gain: 0.6
+    flare_scale: 0.65           # extra flame height at flare=1
+    diya_size_frac: 1.25        # diya width relative to flame height
+    diya_gain: 0.8
+    rim_color: [1.0, 0.78, 0.38]
+    oil_color: [1.0, 0.68, 0.2]
+    smoke_s: 2.2
+    smoke_color: [0.6, 0.5, 0.45]
+    smoke_gain: 1.1
+    smoke_height: 3.2           # rise height in flame heights
+    max_smoke: 16
+    max_glow: 160
+    gust: 1.0                   # how much the occasional random gust ducks/leans the flame (0 = none)
+    lean_k: 0.12                # flame leans against hand velocity: lean = -v/h * lean_k, in flame heights
+    lean_max: 0.45
+    lean_rate: 9.0              # 1/s smoothing of the lean
+    stretch_k: 0.03             # hand moving down stretches the flame, up squashes it
+    stretch_max: 0.25
+    pool_radius: 2.4            # palm light pool half-width, in flame heights
+    pool_gain: 0.4
+    pool_color: [1.0, 0.42, 0.08]
+    breath: 0.14                # pool breathing depth when calm = 1 (quiet end)
+    wick_s: 1.1                 # after a snuff the wick glows and dies over this long
+    ember_rate: 3.0             # tiny embers lifting off the flame tip per second
+    max_embers: 40
+    ember_speed: [0.35, 0.9]    # rise speed in flame heights per second
+    ember_life: [1.2, 2.4]
+    ember_size: 0.085           # glow radius in flame heights
+    ember_gain: 1.3
+  sparkler:
+    rate: 700                   # sparks per second per sparkler
+    speed: 420                  # px/s
+    life: [0.25, 0.7]
+    gravity: 900
+    drag: 2.2
+    size: 3.0
+    color_hot: [0.9, 0.68, 0.32]
+    color_cool: [0.95, 0.38, 0.07]
+    twinkle: 0.6
+    stretch: 1.8
+    inherit_vel: 0.35           # fraction of hand velocity given to sparks
+    star_frac: 0.14             # fraction of sparks that are bright star sparks, splitting into 3-5 tiny ones when they die
+    star_color: [1.0, 0.97, 0.8]
+    big_frac: 0.04              # fraction of extra big white sparks
+    core_radius: 6.0            # burning point glow radius px
+    core_gain: 1.2
+    halo_color: [1.0, 0.6, 0.2]
+    halo_gain: 0.15
+    wire_len: 70                # glowing wire below the burning point, px
+    wire_dots: 9
+    wire_width: 4.0             # px (glow dots, so bolder than it looks)
+    wire_color: [1.0, 0.45, 0.12]
+    wire_gain: 1.2
+    wire_lean: 0.05             # wire tilts against hand velocity (rad per px/s) ...
+    wire_max_tilt: 0.45         # ... up to this many rad
+  particles:
+    fade_in_s: 0.03             # default fade-in for sparks; bursts pass their own (fireworks.burst_fade)
+    max: 60000
+    gain: 1.25                  # HDR gain on all particles
+    stretch_k: 0.014            # seconds of velocity used for streak length
+    branch:                     # sparkler star: tiny sparks spawned by a dying parent spark
+      count: [3, 5]
+      even: false
+      inherit: false              # true = children use the parent's colours
+      brighten: 1.0
+      vel_inherit: 0.2
+      speed: [70, 260]
+      life: [0.14, 0.34]
+      size: 2.0
+      color_hot: [1.0, 1.0, 0.88]
+      color_cool: [1.0, 0.62, 0.18]
+      gravity: 500
+      drag: 2.0
+      twinkle: 0.5
+      stretch: 1.3
+      trail: 0
+      trail_life: 0.2
+    cross:                      # crossette: parent star splits into an even cross of stars
+      count: [4, 4]
+      even: true
+      inherit: true
+      brighten: 1.35
+      vel_inherit: 0.3
+      speed: [140, 230]
+      life: [0.7, 1.1]
+      size: 3.0
+      color_hot: [1.0, 1.0, 0.9]
+      color_cool: [1.0, 0.6, 0.2]
+      gravity: 160
+      drag: 1.2
+      twinkle: 0.5
+      stretch: 0.7
+      trail: 14
+      trail_life: 0.35
+  fireworks:
+    burst_count: 1000
+    crackle_count: 500
+    speed: 520
+    gravity: 220
+    drag: 1.3
+    life: [1.2, 2.4]
+    size: 3.5
+    twinkle: 0.7
+    stretch: 0.5
+    speed_spread: 0.3           # fraction of speed randomised per particle
+    intensity: 0.34             # per-particle brightness of burst shells (dense overlap + trail layer saturates otherwise)
+    flash_size: 26
+    flash_gain: 0.22            # the burst flash sits on the trail layer, which accumulates ~5x: keep it low or it becomes a white disc
+    burst_fade: 0.3             # shell stars ramp up over this long (the burst blooms outward instead of being a dense white disc)
+    start_stagger: 0.09         # stars are born over this many seconds, so a burst grows as a shell instead of popping as a disc
+    ring_frac: 0.22             # fraction of burst particles in the second colour
+    crackle_delay: [0.5, 0.9]
+    crackle_chunks: 6
+    crackle_radius: 0.75        # fraction of burst radius
+    crackle_life: [0.12, 0.35]
+    crackle_size: 2.6
+    embers: 40
+    ember_gravity: 36
+    ember_life: [3.0, 5.0]
+    rocket_trail_rate: 260
+    rocket_head_size: 6.0
+    rocket_trail_life: [0.3, 0.8]
+    rocket_crackle: 0.2         # chance a tail spark pops into tiny crackles
+    finale_bursts: 12
+    finale_flight: [0.45, 0.8]
+    finale_ramp: 1.7            # >1 = bursts start sparse and bunch up (crescendo)
+    finale_area: [0.08, 0.92, 0.10, 0.55]   # x0 x1 y0 y1 as frame fractions
+    finale_kinds: [peony, chrysanthemum, ring, crossette, glitter, chrysanthemum, ring, peony, crossette, glitter, chrysanthemum, ring]
+    curtain_count: 5            # gold willows ending the finale
+    curtain_gap: 0.14           # s between them
+    curtain_scale: 1.2
+    curtain_y: [0.16, 0.3]
+    kind_weights: {peony: 3, chrysanthemum: 3, willow: 2, ring: 2, crossette: 2, glitter: 2}
+    kinds:                      # per burst type: multipliers on the base values above
+      peony:         {count: 1.0, speed: 1.0, gravity: 1.0, life: [1.2, 2.2], size: 1.0, twinkle: 0.7, stretch: 0.5, trail: 0, trail_life: 0.4, flash: 1.0, embers: 1.0, crackle: true}
+      chrysanthemum: {count: 0.7, speed: 1.0, gravity: 0.9, life: [1.5, 2.3], size: 0.95, twinkle: 0.5, stretch: 0.35, trail: 20, trail_life: 0.5, flash: 1.0, embers: 1.0, crackle: true, shift: true}
+      willow:        {count: 0.3, speed: 0.65, gravity: 1.0, drag: 2.0, life: [2.6, 3.6], size: 0.9, twinkle: 0.5, stretch: 0.0, trail: 18, trail_life: 1.0, flash: 1.3, embers: 1.5, crackle: false, palette: [[1.0, 0.82, 0.32], [1.0, 0.42, 0.06]]}
+      ring:          {count: 0.55, speed: 0.95, gravity: 0.6, life: [1.3, 1.9], size: 1.2, twinkle: 0.4, stretch: 0.4, trail: 0, trail_life: 0.4, flash: 0.8, embers: 0.6, crackle: true}
+      crossette:     {count: 0.08, speed: 0.85, gravity: 0.7, drag: 1.5, life: [0.8, 1.05], size: 1.6, twinkle: 0.4, stretch: 0.6, trail: 9, trail_life: 0.3, flash: 1.0, embers: 0.5, crackle: false}
+      glitter:       {count: 0.45, speed: 0.8, gravity: 0.35, drag: 1.7, life: [1.8, 3.2], size: 0.8, twinkle: 1.0, stretch: 0.0, trail: 0, trail_life: 0.4, flash: 0.8, embers: 1.0, crackle: false, palette: [[1.0, 0.95, 0.75], [1.0, 0.7, 0.25]]}
+    palettes:
+      gold: [[1.0, 0.82, 0.35], [1.0, 0.55, 0.1]]
+      saffron: [[1.0, 0.6, 0.15], [1.0, 0.3, 0.05]]
+      magenta: [[1.0, 0.3, 0.75], [0.7, 0.1, 0.5]]
+      teal: [[0.4, 1.0, 0.95], [0.1, 0.6, 0.9]]
+    crackle_color: [[1.0, 1.0, 0.85], [1.0, 0.75, 0.3]]
+    ember_color: [[1.0, 0.6, 0.2], [0.8, 0.2, 0.05]]
+  rangoli:
+    radius_palm_frac: 1.5
+    bloom_s: 1.8                # draw-on time: strokes trace themselves, then the fill floods in
+    colors: [[1.0, 0.16, 0.52], [1.0, 0.62, 0.04], [0.06, 0.92, 0.8], [1.0, 0.93, 0.8]]   # pink, marigold, teal, cream
+    layers:                     # petal rings inner -> outer: count, radii (fraction of R), colour index, kind 0 round / 1 pointed
+      - {n: 8,  r0: 0.04, r1: 0.31, col: 0, kind: 1}
+      - {n: 12, r0: 0.15, r1: 0.52, col: 1, kind: 0}
+      - {n: 16, r0: 0.34, r1: 0.74, col: 2, kind: 1}
+      - {n: 24, r0: 0.56, r1: 0.92, col: 0, kind: 0}
+    dots:                       # rings of dots that pop in round the circle: count, radius, dot radius (fractions of R), colour index
+      - {n: 36, r: 1.07, size: 0.034, col: 1}
+      - {n: 18, r: 1.19, size: 0.045, col: 0}
+    ring_stagger: 0.16          # delay between rings (fraction of bloom_s)
+    spin: 0.14                  # rad/s slow rotation (rings counter-rotate, faster outward)
+    line_px: 3.2                # stroke width floor, px (thin lines vanish on this projector)
+    line_frac: 0.011            # stroke width as fraction of R
+    edge_frac: 0.035
+    fill_gain: 0.62
+    edge_gain: 1.35
+    scatter_count: 1300
+    scatter_speed: [120, 520]
+    scatter_gain: 0.5
+    scatter_fade_s: 0.45
+    scatter_life: [0.8, 1.6]
+
+audio:
+  enabled: true
+  buffer: 512
+  volume: 0.8
+  dir: assets/sounds
+  sample_rate: 44100
+  fade_ms: 80                   # loop() fade in/out
+  peak_dbfs: -3                 # gen_sounds normalisation
+  seed: 1031                    # gen_sounds RNG seed
+  num_channels: 16              # mixer voices for fire-and-forget play()
+
+recorder:
+  enabled: true
+  ring_seconds: 10
+  record_fps: 30
+  proj_size: [640, 360]         # projector output is downscaled before saving
+  cam_size: [640, 360]
+  glitch_min_gap_s: 4           # don't save glitches more often than this
+  fps_glitch_below: 30
+  dir: captures
+  queue_max: 8                  # frames queued to the writer thread; push() drops when full
+  fourcc: mp4v
+  font_scale: 0.5
+  ring_jpeg_quality: 85         # ring buffer frames are JPEG-compressed in RAM (keeps 10 s ~ 20 MB)
+  story_best_clips: 5
+  ffmpeg_crf: 20
+
+rehearse:
+  beat_timeout_s: 8             # a beat that doesn't get its gesture in this long is a miss and auto-advances
+
+debug:
+  show_overlay: false           # D toggles at runtime
+  safe_zone_9x16: true
+  calibrated_outline: true
+
+tools:                          # setup/test tools (tools/*.py); not read by the show itself
+  font_scale: 0.6
+  font_thick: 1
+  hud_bar_px: 100               # status text strip under the camera preview
+  hud_line_px: 24
+  selftest_s: 3                 # --selftest: seconds per phase before the tool exits 0
+  first_frame_s: 4              # camera must deliver a frame within this, else assume no permission
+  fallback_proj_pos: [560, 80]  # where the stand-in projector window goes when no projector is attached
+  hand_colors: {Left: [255, 140, 40], Right: [0, 140, 255]}   # BGR: Left blue, Right orange
+  tip_dot_radius_px: 5          # projected dot on every fingertip (projector px)
+  main_dot_radius_px: 12        # projected dot on right index tip
+  ring_radius_px: 24
+  ring_thick_px: 2
+  outline_level: 70             # grey level of the faint calibrated-area rectangle
+  vel_arrow_s: 0.15             # gesture_debug velocity arrow = velocity * this many seconds
+  gesture_panel_px: 380
+  gesture_bar_h_px: 18
+  calibrate:
+    mode: rows                  # rows = one grid row per step (fast); falls back to dots = one dot per step
+    settle_frames: 2            # camera frames discarded after latency has elapsed
+    avg_frames: 2               # frames averaged per capture
+    capture_timeout_s: 2.0
+    diff_min: 30                # min grey difference (dots vs black) to count as lit
+    diff_frac: 0.5              # threshold = max(diff_min, diff_frac * peak difference)
+    blur_px: 5                  # odd Gaussian kernel on the difference image
+    blob_min_area: 10           # camera px^2
+    blob_max_area: 3000
+    blob_min_circularity: 0.55
+    min_dots_seen: 4            # all-dots sanity pass must see at least this many
+    ransac_px: 3.0              # inlier threshold, projector px
+    min_inliers: 8
+    max_err_px: 6.0             # mean inlier reprojection error above this = reject
+    manual_grid: [4, 3]         # dots clicked in --manual
+    nudge_px: 1                 # arrow-key step for Mapping.offset (projector px)
+  latency:
+    square_frac: 0.5            # white square side / render height
+    roi_frac: 0.6               # sampled part of the square (keeps edges out)
+    gap_ms: [300, 600]          # random black time between trials
+    baseline_frames: 8
+    settle_s: 0.3               # wait after going black (plus a random gap_ms) before taking the dark baseline
+    timeout_s: 1.0              # no brightness crossing within this = failed trial
+    min_contrast: 12            # bright - dark grey levels needed, else the camera isn't seeing the square
+    min_valid: 10               # fewer valid trials than this = don't save
+    r4_fail_ms: 150
+  brightness:
+    level_step: 0.1             # UP/DOWN
+    level_min: 0.1
+    scale_step: 1.15            # LEFT/RIGHT multiplies/divides size by this
+    seed: 7
+    spark_count: 300
+    spark_sizes: [1, 2, 3, 5]   # px, one quadrant each
+    spark_ring_frac: [0.6, 1.0] # inner/outer ring radius as fraction of the quadrant radius
+    disc_frac: 0.25             # palm disc radius / render height at scale 1
+    flame_frac: 0.45            # flame blob height / render height at scale 1
+    ramp_steps: 16
+    grating_px: [1, 2]          # line widths in the R2 chart
+    selftest_dwell_s: 0.5

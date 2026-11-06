@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+logs/
+# downloaded by setup.sh
+assets/models/*.task
+# your machine's calibration + your footage/story logs stay private
+calibration/*.json
+captures/*
+!captures/.gitkeep
