@@ -10,7 +10,7 @@ import math
 import numpy as np
 from .types import WRIST, THUMB_TIP, INDEX_TIP, MIDDLE_TIP, TIPS, PIPS
 
-GESTURES = ["open_palm", "fist", "pinch", "point", "circle", "low_palm", "raise", "joined", "arms_wide", "still",
+GESTURES = ["open_palm", "fist", "pinch", "point", "circle", "low_palm", "raise", "joined", "arms_wide", "still", "snap",
             "pinch_both", "cupped", "palms_together"]
 
 
@@ -44,10 +44,12 @@ class GestureClassifier:
         self.states = {k: GestureState() for k in GESTURES}
         self._heading = {}            # hand -> deque of (t, heading angle) for circle detection
         self._last_pair = None        # (t, midpoint cam px, palm size) when two hands were last close together
+        self._snap = {}               # hand -> {"touch": since, "armed": last time thumb+middle were pressed}
 
     # ---- per-hand features ----------------------------------------------------------------
     def _extension(self, h):
-        x = h.cam[:, :2]
+        # 3D: a flattened, palm-up hand points its fingers at the camera; in 2D they'd look curled (false snuffs)
+        x = h.cam[:, :3] if self.g.use_3d else h.cam[:, :2]
         w = x[WRIST]
         r = [np.linalg.norm(x[t] - w) / max(np.linalg.norm(x[p] - w), 1e-3) for t, p in zip(TIPS, PIPS)]
         k = self.g.finger_extended_ratio
@@ -60,7 +62,7 @@ class GestureClassifier:
         pr = self.g.pinch_ratio
         return {"open": float(ext.min() * 0.5 + ext.mean() * 0.5),
                 # a closed hand: judged on the mean curl, because MediaPipe often leaves one finger half-straight
-                "fist": ramp(float(ext.mean()), self.g.fist_mean_ext[1], self.g.fist_mean_ext[0]),
+                "fist": ramp(float(ext.mean()), self.g.fist_mean_ext[0], self.g.fist_mean_ext[1]),
                 "pinch": ramp(pinch_r, pr * 1.6, pr * 0.8),
                 # index out, the rest mostly curled (a relaxed middle finger is normal when pointing)
                 "point": float(ext[0] * (1.0 - ext[1:].mean())),
@@ -85,6 +87,34 @@ class GestureClassifier:
         a = np.unwrap(np.array([v for _, v in q]))
         return float(abs(a[-1] - a[0]) / (2 * math.pi))
 
+    def _snap_fired(self, label, h, now):
+        """Finger snap: thumb and middle fingertip pressed together briefly, then flung apart fast. The fling
+        is often a motion-blurred frame where the hand is lost, which also counts if it comes right after."""
+        g = self.g
+        st = self._snap.setdefault(label, {"touch": None, "armed": None})
+        if h is None or not h.tracked:
+            fired = st["armed"] is not None and now - st["armed"] < g.snap_lost_s
+            st["touch"] = st["armed"] = None
+            return fired
+        x = h.cam[:, :3] if g.use_3d else h.cam[:, :2]
+        d = float(np.linalg.norm(x[THUMB_TIP] - x[MIDDLE_TIP])) / max(h.size_cam, 1e-3)
+        d_index = float(np.linalg.norm(x[THUMB_TIP] - x[INDEX_TIP])) / max(h.size_cam, 1e-3)
+        if d < g.snap_touch and d < d_index:          # thumb on the middle finger, not a thumb-index pinch
+            st["touch"] = st["touch"] or now
+            if now - st["touch"] >= g.snap_touch_s:
+                st["armed"] = now
+            return False
+        st["touch"] = None
+        # the release has to look like a snap: the middle finger flies into the palm
+        palm = x[[0, 5, 9, 13, 17]].mean(0)
+        curled = float(np.linalg.norm(x[MIDDLE_TIP] - palm)) / max(h.size_cam, 1e-3) < g.snap_curl
+        if st["armed"] is not None and d > g.snap_open and curled and now - st["armed"] < g.snap_window_s:
+            st["armed"] = None
+            return True
+        if st["armed"] is not None and now - st["armed"] >= g.snap_window_s:
+            st["armed"] = None
+        return False
+
     # ---- confidences ----------------------------------------------------------------------
     def confidences(self, tf, now):
         g = self.g
@@ -102,6 +132,9 @@ class GestureClassifier:
             k = max(f, key=lambda k: f[k][feat])
             return f[k][feat], k
 
+        for lab in ("Left", "Right"):
+            if self._snap_fired(lab, tf.hands.get(lab), now):
+                c["snap"] = (1.0, lab)
         c["open_palm"] = best("open")
         c["fist"] = best("fist")
         c["pinch"] = best("pinch")

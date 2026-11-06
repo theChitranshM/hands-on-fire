@@ -194,10 +194,15 @@ class Tracker:
             palm = proj[PALM_IDS].mean(0)
             vel_cam = dx[PALM_IDS, :2].mean(0) if tracked else np.zeros(2)
             p2 = self.mapping.cam_to_proj(np.array([palm_cam, palm_cam + vel_cam * 0.05]), render_size)
-            size_cam = float(np.linalg.norm(xp[WRIST, :2] - xp[MIDDLE_MCP, :2]))
+            # palm size in 3D (MediaPipe z): a flat, palm-up hand seen edge-on keeps its real size instead of
+            # shrinking to a sliver, so the diya doesn't shrink or jump when the arm is flattened
+            k3 = 1.0 if self.cfg.gestures.use_3d else 0.0
+            size_cam = float(np.linalg.norm((xp[WRIST] - xp[MIDDLE_MCP]) * [1.0, 1.0, k3]))
+            p0 = self.mapping.cam_to_proj(np.array([palm_cam, palm_cam + [size_cam, 0.0]]), render_size)
+            size_proj = float(np.linalg.norm(p0[1] - p0[0]))
             hands[label] = Hand(label=label, cam=xp, proj=proj, palm_cam=palm_cam, palm=palm,
                                 vel_cam=vel_cam, vel=(p2[1] - p2[0]) / 0.05, size_cam=size_cam,
-                                size=float(np.linalg.norm(proj[WRIST] - proj[MIDDLE_MCP])),
+                                size=size_proj,
                                 presence=presence, tracked=tracked, score=score)
         return TrackFrame(t=ft, hands=hands, image=img, cam_fps=self.camera.fps, infer_ms=infer, lead_ms=lead_ms)
 

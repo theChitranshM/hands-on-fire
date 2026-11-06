@@ -64,13 +64,9 @@ If macOS says the file "can't be opened because it's from an unidentified develo
 4. **Latency:** `launch/latency.command`. It flashes the projector 50 times and times how long the camera takes to see it. Prediction uses this number.
 5. **Show:** `launch/show.command`.
 
-## Light: keep the room dark
+## Light
 
-Don't turn the room light on: it washes the projection out on camera. The camera still needs to see your hands, so **the projector lights them itself**. A soft warm pool follows each hand, like diya light on skin. When no hand is found, a dim search light glows over the performance area so a hand entering it gets picked up. On real takes the camera found a hand in 5% of frames in the dark and 33–39% with the light on; the hand light gives the camera that light only where your hands are.
-
-- **UP / DOWN** make the hand light brighter or dimmer live (shown on the operator window). Go brighter if tracking drops; dimmer if it shows too much on the reel.
-- **L** turns it off, for example if you light your hands with a small lamp instead.
-- If tracking still struggles, put a dim warm lamp low and behind the camera, aimed at your hands and not the wall.
+Film with the room light **on but soft**: a lamp or a dimmed ceiling light. In a dark room the camera can't see your hands (real takes: a hand was found in 5% of frames in the dark, against 33–39% with the light on). Keep the light off the wall where the fireworks land, and lock the filming camera's exposure on the diya so the effects don't wash out.
 
 ## How to stand and hold things
 
@@ -86,7 +82,7 @@ The light is drawn the way the real objects sit, so move the way you'd hold the 
 - **Anar:** lower your open palm. A flowerpot fountain erupts upward from it.
 - **Rocket:** lift your hand up in one steady move. A rocket launches from your palm and bursts on the wall.
 - **Finale:** open both arms wide, slowly.
-- **Quiet end:** hold the diya still. Sky lanterns (akash kandil) rise from above your hand, everything else fades, one diya stays, and then everything fades to black.
+- **Quiet end:** while the finale fills the wall, **snap your fingers**. The fireworks vanish, sky lanterns (akash kandil) rise from above your hand, one diya stays on your palm, and then everything fades to black.
 
 This projector shows the image about 170 ms after the camera sees your hand. The software predicts where your hand is going and steadies the diya when your hand is still, so smooth movement keeps the light locked on.
 
@@ -104,8 +100,8 @@ This projector shows the image about 170 ms after the camera sees your hand. The
 | 8 | Anar | lower your open palm | SPACE / 8 |
 | 9 | Rocket | lift your hand fast | SPACE / 9 |
 | 10 | Firework | automatic after the rocket | 0 |
-| 11 | Finale | arms wide (or starts by itself 2 s after the firework) | SPACE |
-| 12 | Quiet end: sky lanterns, one diya | hold still (or starts by itself 3 s into the finale) | SPACE |
+| 11 | Finale | arms wide (or starts by itself 2 s after the firework); keeps going until your snap | SPACE |
+| 12 | Quiet end: sky lanterns, one diya | **snap your fingers** | SPACE |
 
 If a gesture doesn't come, the beat saves a "missed" glitch clip after 8 s and moves on by itself after `sequence.fallback_s` (14 s), so a take never stalls. Set it to 0 to wait forever.
 
@@ -118,8 +114,6 @@ If a gesture doesn't come, the beat saves a "missed" glitch clip after 8 s and m
 | R | reset to the start |
 | 1–9, 0 | jump to beat 1–9, 10 |
 | G | gesture triggers on/off (off = keyboard only) |
-| L | hand light on/off |
-| UP / DOWN | hand light brighter / dimmer |
 | H | show/hide the operator window (with a big cue for your next move) |
 | M | mute |
 | D | debug overlay: calibrated area, 9:16 safe zone, fingertip dots |
@@ -160,7 +154,7 @@ The full show runs as one take. Showcase splits it into **10 scenes** so you can
 | Key | Scene | Gesture (repeat as often as you like) |
 |---|---|---|
 | 1 | Puja | namaste: lamps light one by one, rangoli, petals; part your hands to scatter |
-| 2 | Diya | open palm lights it, close your hand snuffs it, open again relights |
+| 2 | Diya | open palm lights it (hold it flat and palm-up like a real diya), close your hand snuffs it, open again relights |
 | 3 | Aarti | circle the diya: light trail, a bell on every loop |
 | 4 | Phuljhadi | pinch to light (each hand its own); let go to put it out |
 | 5 | Chakri | point your index finger; it spins while you point |
@@ -168,7 +162,7 @@ The full show runs as one take. Showcase splits it into **10 scenes** so you can
 | 7 | Rocket | lift your hand fast: rocket + firework, again and again |
 | 8 | Finale | open your arms wide (or F) |
 | 9 | Lanterns | lift your open palm: sky lanterns rise from it |
-| 0 | Quiet end | the last diya; F fades to black, F again brings it back |
+| 0 | Quiet end | fireworks running: **snap** and they vanish, lanterns rise, one diya stays; then F fades to black, F again brings it back |
 
 SPACE / B go to the next / previous scene. The operator window shows the scene's cue in big letters.
 
@@ -219,7 +213,7 @@ Everything lives in **`config.yaml`**, and there are no magic numbers in the cod
 | **Show opens in a small window** | No projector was detected (see above). |
 | **Operator window missing** | Press H. |
 | **Wrong camera** | `tools/list_devices.py`, then set `camera.device`. |
-| **Tracking lost / jittery** | Press UP a few times to brighten the hand light. Stand 1–1.5 m from the camera. Still lost: a dim warm lamp low behind the camera. Jitter: lower `tracker.one_euro.min_cutoff`. Lag on fast moves: raise `tracker.one_euro.beta`. |
+| **Tracking lost / jittery** | Turn the room light up a little. Stand 1–1.5 m from the camera. Jitter: lower `tracker.one_euro.min_cutoff`. Lag on fast moves: raise `tracker.one_euro.beta`. |
 | **Left and right hands swapped** | Flip `tracker.swap_handedness`. |
 | **Flame sits next to the palm** | Re-run calibrate, or nudge with the arrows in its verify step. Press C during the show to check. |
 | **Lag too high** | Re-run latency. Projector processing off, Game mode on. Move smoothly rather than snappily. |

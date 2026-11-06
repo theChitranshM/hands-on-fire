@@ -28,7 +28,7 @@ tracker:
   min_presence_confidence: 0.3
   min_tracking_confidence: 0.3
   swap_handedness: true       # MediaPipe assumes a selfie (mirrored) image; our camera is not mirrored
-  gamma: 0.55                 # brighten shadows before tracking (1 = off). 0.40 and 0.55 tie on footage; 0.70 is worse
+  gamma: 1.0                  # 1 = off. Lit room (how it's filmed): 1.0 finds a hand in 42% of frames vs 33% at 0.55. Dark room: use 0.55
   one_euro:
     min_cutoff: 0.7           # Hz. lower = steadier at rest (diya trembled at 1.2)
     beta: 0.02                # higher = less lag when moving fast
@@ -78,6 +78,8 @@ gestures:
     palms_together: 250
     arms_wide: 250
     still: 700
+    snap: 0
+  use_3d: true                  # finger extension + palm size from 3D landmarks (flat palm-up hands read correctly)
   finger_extended_ratio: 1.15   # tip-to-wrist / pip-to-wrist above this = extended
   fist_mean_ext: [0.55, 0.2]    # mean finger extension: fully open .. closed enough to count as a fist
   pinch_ratio: 0.38             # thumb-index distance / palm size below this = pinch
@@ -93,6 +95,12 @@ gestures:
   raise_speed: 1.6              # palm sizes per s upward (one hand)
   arms_wide_frac: 0.45          # horizontal hand separation / camera width ...
   arms_wide_palms: 4.5          # ... or palm centres this many palm sizes apart (take 8: 0.48 of the frame when close)
+  snap_touch: 0.35              # snap: thumb + middle fingertip closer than this (palm sizes) ...
+  snap_touch_s: 0.12            # ... for at least this long arms it ...
+  snap_open: 0.75               # ... then flung this far apart ...
+  snap_window_s: 0.3            # ... within this long fires it, with the middle finger curled into the palm
+  snap_curl: 0.85               # middle fingertip to palm centre (palm sizes) below this = curled
+  snap_lost_s: 0.0             # a hand lost mid-snap doesn't count: that rule caused most false snaps (take 10: 3 -> 0)
   still_speed: 0.45             # palm sizes per s below this = still (takes 6-7: held hands read 0.1-0.6)
 
 sequence:
@@ -100,14 +108,14 @@ sequence:
   rangoli_enabled: true         # rangoli blooms at the joined hands in the opening puja
   launch_flight_s: 1.0          # rocket flight time before the burst
   firework_hold_s: 2.5          # how long the first firework plays before the finale can trigger
+  finale_s: 10.0                # finale bursts keep coming this long (it ends on your snap)
   finale_min_s: 3.0             # finale plays at least this long before "still" starts the quiet end
   quiet_hold_s: 4.0
   quiet_fade_s: 2.0
   firework_target_frac: [0.5, 0.18]   # where the burst lands in projector space (x, y as fraction)
-  quiet_trail_fade_s: 1.2       # quiet end: leftover sparks and embers fade out this fast, leaving only the diya
+  quiet_trail_fade_s: 0.35      # quiet end: on the snap, leftover sparks and embers vanish this fast, leaving only the diya
   auto_after_s:                 # these beats move on by themselves this long after their minimum time (the gesture can still come earlier)
     10: 2.0                     #   firework -> finale (arms wide fired in 1 of 3 real takes: both hands rarely in frame)
-    11: 3.0                     #   finale -> quiet end
   fallback_s: 14                # show mode: a beat whose gesture never comes moves on by itself after this (0 = wait forever)
   hand_switch_s: 0.6            # the diya moves to the other hand only after its own has been lost this long
   lantern_lift: 1.6             # sky lanterns start this many palm sizes above the diya hand
@@ -123,6 +131,7 @@ sequence:
   puja_min_s: 2.0               # the rangoli holds at least this long before parting the hands scatters it
 
 showcase:                       # run.py --showcase: one effect per scene, repeatable, no time limits
+  relight_lock_s: 1.0           # diya scene: a fresh flame can't be snuffed for this long (no flicker)
   release_s: 1.0                # a sparkler goes out this long after you stop pinching
   force_s: 6.0                  # F lights the sparkler / spins the chakri for this long
   anar_s: 6.0                   # one anar burns this long
@@ -132,18 +141,6 @@ showcase:                       # run.py --showcase: one effect per scene, repea
   lantern_cooldown_s: 3.0
 
 render:
-  handlight:                    # the projector lights your hands so the camera can track them in the dark
-    enabled: true               # L toggles in the show; UP/DOWN change gain
-    gain: 0.22                  # pool brightness on a tracked hand (0..1 of white)
-    color: [1.0, 0.78, 0.52]    # warm, like diya light
-    radius_palm: 1.2            # minimum pool radius in palm sizes
-    reach_pad: 1.35             # pool radius = farthest landmark from the hand centre x this
-    edge: 0.55                  # soft edge, fraction of the radius
-    search_gain: 0.5            # search light (no hand found) relative to gain
-    search_after_s: 0.4
-    zone: [0.5, 0.6]            # search light centre, fraction of frame (where your hands perform)
-    zone_radius: 0.38           # fraction of frame width
-    fade_s: 0.35
   brightness: 1.0               # global multiplier, applied last
   scale: 1.0                    # global effect size multiplier
   trail_decay: 0.82             # per-frame persistence of the particle trail layer (0 = no trails)
@@ -157,6 +154,7 @@ render:
   flame:
     size_palm_frac: 0.55        # flame height in palm sizes: a real diya flame is ~5 cm on a ~9.5 cm palm
     flicker_speed: 1.0
+    flame_gain: 0.55            # flame body brightness (was blowing out to a white blob on camera in a lit room)
     glow: 1.0
     core_color: [1.0, 0.95, 0.75]
     body_color: [1.0, 0.55, 0.12]
@@ -164,16 +162,17 @@ render:
     diya_color: [0.92, 0.36, 0.12]
     relight_flare: 1.3          # peak flare of the relight (beat 3)
     quiet_embers: 2.4           # beat 10: slow floating embers rate multiplier
-    quiet_glow: 1.9             # beat 10: palm pool + halo gain of the last diya
+    quiet_glow: 1.4             # beat 10: palm pool + halo gain of the last diya
     relight_sparks: 90          # sparks puffed off the wick on relight
     relight_speed: [140, 460]
     max: 48                     # max simultaneous flames / diyas (diya row + hand diyas + lanterns)
     flicker_height: 0.10        # height wobble amplitude
     flicker_sway: 0.22          # sideways lean amplitude (fraction of flame height)
     halo_radius: 1.3            # glow halo radius, in flame heights
-    halo_gain: 0.6
+    halo_gain: 0.35
     flare_scale: 0.65           # extra flame height at flare=1
     diya_size_frac: 1.35        # bowl width relative to flame height (~7 cm clay diya)
+    size_smooth_s: 0.6          # the diya's size follows the palm this slowly (palm size swings as the hand tilts)
     seat_frac: 0.16             # wick lifted above the palm centre (palm sizes) so the bowl rests in the palm hollow
     diya_gain: 0.8
     rim_color: [1.0, 0.78, 0.38]
@@ -191,7 +190,7 @@ render:
     stretch_k: 0.03             # hand moving down stretches the flame, up squashes it
     stretch_max: 0.25
     pool_radius: 2.4            # palm light pool half-width, in flame heights
-    pool_gain: 0.4
+    pool_gain: 0.22
     pool_color: [1.0, 0.42, 0.08]
     breath: 0.14                # pool breathing depth when calm = 1 (quiet end)
     wick_s: 1.1                 # after a snuff the wick glows and dies over this long
@@ -526,6 +525,7 @@ recorder:
   cam_size: [640, 360]
   glitch_min_gap_s: 4           # don't save glitches more often than this
   fps_glitch_below: 30
+  tracking_lost_gap_s: 30       # at most one tracking-lost clip per this many seconds
   dir: captures
   queue_max: 8                  # frames queued to the writer thread; push() drops when full
   fourcc: mp4v

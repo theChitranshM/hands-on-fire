@@ -79,7 +79,7 @@ def render_hud(size, tf, gestures, seq, engine, stats, mapping=None):
              f"latency (measured) {stats['latency_ms']:.0f} ms{'' if stats['latency_measured'] else ' DEFAULT'}",
              f"calibration {'OK' if stats['calibrated'] else 'MISSING - run tools/calibrate.py'}",
              f"take #{stats['take']}   coffee x{stats['coffee']}",
-             f"hand light {stats.get('handlight', '-')}   audio {'muted' if stats['muted'] else 'on'}   debug {'on' if stats['debug'] else 'off'}"
+             f"audio {'muted' if stats['muted'] else 'on'}   debug {'on' if stats['debug'] else 'off'}"
              + ("   BLACKOUT" if engine.blackout else ""),
              ]
     for s in lines:
@@ -92,7 +92,7 @@ def render_hud(size, tf, gestures, seq, engine, stats, mapping=None):
         for r in stats["rehearse"][-4:]:
             _txt(hud, r, (x0, y), 0.42)
             y += 18
-    keys = "SPACE next  B back  R reset  1-0 jump  G gestures  L light  UP/DN light  H hud  M mute  D debug  C calib  K coffee  ESC blackout  Q quit"
+    keys = "SPACE next  B back  R reset  1-0 jump  G gestures  H hud  M mute  D debug  C calib  K coffee  ESC blackout  Q quit"
     _txt(hud, keys, (12, H - 12), 0.45, (180, 180, 180))
     if stats.get("flash"):
         _txt(hud, stats["flash"], (12, H - 84), 0.7, (0, 220, 255), 2)

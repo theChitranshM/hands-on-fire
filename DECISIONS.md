@@ -110,3 +110,20 @@ Judgment calls the brief didn't cover. Simplest option that keeps the illusion c
   - F as a manual trigger, and one continuous recording.
   - A printed log with the time of every trigger.
   The one-take show stays as it was.
+
+## Fifth round (2026-11-06): lit room, the flat-palm bug, snap ending
+- **Hand light removed** at the performer's request; it looked weird on camera. Filming is with the room light on.
+- **Tracker gamma off (1.0) for the lit room.** On lit take 7: 1.0 found a hand in 42.4% of frames, 0.75 in 35.1%, 0.55 in 33.3%.
+- **Flattening the arm snuffed the diya: a real bug.**
+  - The fist ramp was inverted. An open hand (all fingers extended) scored fist = 1.0, so a flat open palm "snuffed" the diya. The showcase log had 68 snuffs.
+  - Fixed: on that footage, fist activations went from 12 to 2.
+  - Finger extension and palm size now also use MediaPipe's depth (z). That helped only a little (diya size spread 1.98x → 1.86x).
+  - The diya's size now eases over 0.6 s, so it doesn't pulse as the hand tilts.
+- **Diya too bright:** a new `flame_gain` (0.55) on the flame body; halo 0.6 → 0.35, palm pool 0.4 → 0.22, quiet glow 1.9 → 1.4.
+- **Snap → quiet end:**
+  - What makes a snap: thumb and middle fingertip pressed for 0.12 s (the thumb closer to the middle finger than the index, so a pinch doesn't count), then flung apart within 0.3 s with the middle finger curled into the palm.
+  - False snaps on footage where no snap happened: take 10 went 3 → 1 → **0**, and 150 s of sparkler play with 17 pinches went 6 → 2 → **0**. The first drop came from the stricter release; the last came from dropping the "hand lost mid-snap counts" rule, which caused most false snaps. Not yet tested on a real snap.
+  - A snap only counts during the finale, after its 3 s minimum.
+  - On the snap, pending fireworks are cancelled and the sky clears in 0.35 s. The finale keeps bursting (10 s) until the snap.
+- **Showcase diya:** a new flame can't be snuffed for 1 s, and a snuffed one can't relight for 1.2 s. The log showed snuff/relight pairs 0.2 s apart.
+- **Tracking-lost clips are throttled** to one per 30 s. One 24-minute session had saved 195.

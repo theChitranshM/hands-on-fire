@@ -24,7 +24,7 @@ BEATS = [
     (9, "Rocket", "raise"),           # lift fast: a rocket launches from the palm
     (10, "Firework", None),
     (11, "Finale", "arms_wide"),
-    (12, "Quiet end", "still"),       # sky lanterns rise, one diya stays on the palm, fade to black
+    (12, "Quiet end", "snap"),        # snap: everything else vanishes, sky lanterns rise, one diya stays, fade to black
     (13, "Done", None),
 ]
 DONE = len(BEATS) - 1
@@ -32,7 +32,8 @@ HINTS = {"joined": "Join your hands in namaste", "open_palm": "Open your palm to
          "circle": "Circle the diya slowly (aarti)", "fist": "Close your hand slowly over the flame",
          "pinch": "Pinch thumb + index like holding a phuljhadi", "point": "Point your index finger",
          "low_palm": "Lower your open palm", "raise": "Lift your hand up in one steady move",
-         "arms_wide": "Open both arms wide", "still": "Hold the diya still"}
+         "arms_wide": "Open both arms wide", "still": "Hold the diya still",
+         "snap": "Snap your fingers: quiet end"}
 MIN_DWELL_S = 0.4
 MILESTONES = {1: ("first_puja", "First puja: hands joined, the row of diyas lit up"),
               2: ("first_flame", "First flame on my palm"), 3: ("first_aarti", "First aarti circle"),
@@ -254,8 +255,9 @@ class Sequence:
             tgt = np.array(sc.firework_target_frac) * [W, H]
             fx["fireworks"].launch(tuple(start), tuple(tgt), sc.launch_flight_s)
         if beat == 11:
-            fx["fireworks"].finale(sc.finale_min_s + 1.0)
+            fx["fireworks"].finale(sc.finale_s)       # keeps going until the snap
         if beat == 12:
+            fx["fireworks"].clear()                   # the snap: nothing new bursts, the sky goes quiet
             h = self._hand()
             src = h.palm - [0, h.size * sc.lantern_lift] if h is not None else np.array([W * 0.5, H * 0.6])
             fx["lanterns"].release(tuple(src))          # from just above the palm, so the last diya stays clear
@@ -301,8 +303,11 @@ class Sequence:
     def _palm_diya(self, intensity, flare=0.0, glow=1.0, calm=0.0, embers=1.0):
         h = self._hand()
         if h is not None:
-            seat = self.stab(self._seat(h.palm, h.size), h.size, self.dt)
-            self.last_palm = (tuple(seat), h.size)
+            # the diya's size eases slowly: palm size swings ~2x as the hand tilts, a real diya doesn't
+            k = min(1.0, self.dt / self.cfg.render.flame.size_smooth_s)
+            self._dsize = h.size if getattr(self, "_dsize", None) is None else self._dsize + (h.size - self._dsize) * k
+            seat = self.stab(self._seat(h.palm, self._dsize), self._dsize, self.dt)
+            self.last_palm = (tuple(seat), self._dsize)
             intensity *= h.presence
         if self.last_palm is None:
             return
@@ -372,8 +377,6 @@ class Sequence:
     def draw_direct(self):
         """Effects on the direct layer (flames, diyas, rangoli, petals, lanterns). Called after engine.begin_direct()."""
         fx, b, t_in, fc = self.fx, self.beat, self.now - self.entered, self.cfg.render.flame
-        fx["handlight"].update(self.dt, self.tf.hands, enabled=b not in (10,) and b != DONE)
-        fx["handlight"].render()
         fx["diya_row"].update(self.dt)
         fx["diya_row"].draw()
         if b == 2:

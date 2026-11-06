@@ -47,7 +47,7 @@ _VARY = "in vec2 v_q; in float v_int, v_flare, v_seed, v_H, v_lean, v_stretch, v
 _FLAME_FRAG = """
 #version 410
 """ + _VARY + """
-uniform float u_time, u_speed, u_fh, u_sway, u_halo_r, u_halo_gain, u_glow, u_gust;
+uniform float u_time, u_speed, u_fh, u_sway, u_halo_r, u_halo_gain, u_glow, u_gust, u_flame_gain;
 uniform vec3 u_core, u_body, u_tip;
 out vec4 f;
 """ + GLSL_NOISE + """
@@ -93,7 +93,7 @@ void main() {
     halo *= 1.0 + fl * 0.5;
     vec3 hc = vec3(1.0, 0.5, 0.12) * halo + vec3(1.0, 0.8, 0.35) * pow(max(1.0 - r * 1.7, 0.0), 2.5) * 0.6;
     hc += fl * vec3(1.0, 0.85, 0.55) * pow(max(1.0 - r * 1.3, 0.0), 2.0) * 0.45;
-    f = vec4((flame + hc * u_glow * v_glow) * v_int, 1.0);
+    f = vec4((flame * u_flame_gain + hc * u_glow * v_glow) * v_int, 1.0);
 }
 """
 
@@ -268,7 +268,8 @@ class FlameRenderer:
         self._pp["u_box"] = (-pr, pr, -0.1 - pr * 0.62, -0.1 + pr * 0.62)
         self._sp["u_box"] = (-1.0, 1.0, -0.1, float(c.smoke_height))
         for k, v in (("u_speed", c.flicker_speed), ("u_fh", c.flicker_height), ("u_sway", c.flicker_sway),
-                     ("u_halo_r", hr), ("u_halo_gain", c.halo_gain), ("u_glow", c.glow), ("u_gust", c.gust)):
+                     ("u_halo_r", hr), ("u_halo_gain", c.halo_gain), ("u_glow", c.glow), ("u_gust", c.gust),
+                     ("u_flame_gain", c.flame_gain)):
             self._fp[k] = float(v)
         self._fp["u_core"], self._fp["u_body"], self._fp["u_tip"] = (tuple(c[k]) for k in ("core_color", "body_color", "tip_color"))
         self._dp["u_speed"] = self._pp["u_speed"] = float(c.flicker_speed)

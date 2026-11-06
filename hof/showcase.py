@@ -22,7 +22,7 @@ SCENES = [
     (7, "Rocket", "raise", "Lift your hand up fast: rocket + firework, again and again"),
     (8, "Finale", "arms_wide", "Open your arms wide (or F)"),
     (9, "Lanterns", "raise", "Lift your open palm up: sky lanterns rise from it"),
-    (10, "Quiet end", None, "Hold the diya. F fades to black, F again brings it back"),
+    (10, "Quiet end", "snap", "Fireworks running: snap your fingers, they vanish, one diya stays. F fades to black"),
 ]
 LAST = len(SCENES) - 1
 
@@ -57,6 +57,8 @@ class Showcase(Sequence):
         self._clear_scene()
         self.beat, self.entered, self._state, self._cool = scene, time.perf_counter(), {}, 0.0
         self._event("enter", how)
+        if scene == 10:
+            self.fx["fireworks"].finale(self.sc.finale_s * 3)   # plenty of sky to cut with the snap
         if self.recorder:
             self.recorder.set_status(self.recorder.take_number, f"showcase {scene} {self.name}")
 
@@ -99,7 +101,8 @@ class Showcase(Sequence):
     # ---- per-frame --------------------------------------------------------------------------
     def update(self, tf, gestures, now, dt):
         self.tf, self.now, self.dt, self.gestures = tf, now, dt, gestures
-        self.engine.trail_gain = 1.0
+        q = self._state.get("quiet")
+        self.engine.trail_gain = max(0.0, 1 - (now - q) / self.sc.quiet_trail_fade_s) if q else 1.0
         if self._state.get("fade") is None:
             self.engine.brightness = float(self.cfg.render.brightness)
         self._cool = max(0.0, self._cool - dt)
@@ -113,11 +116,13 @@ class Showcase(Sequence):
                 and now - self._state["joined"] > self.sc.puja_min_s:
             self.fx["rangoli"].scatter()
             self._state["joined"] = None
-        if s == 2 and self._state.get("lit") and gestures["fist"].just_on:
+        if s == 2 and self._state.get("lit") and gestures["fist"].just_on \
+                and now - self._state.get("lit_t", 0) > self.k.relight_lock_s:
             self._state["lit"] = False
             if self.last_palm is not None:
                 self.fx["flames"].snuff(*self.last_palm)
             self._play("snuff")
+            self._state["snuff_t"] = now
             self._event("snuff", "gesture")
         if s == 10 and self._state.get("fade") is not None:
             f = max(0.0, 1 - (now - self._state["fade"]) / self.sc.quiet_fade_s)
@@ -162,6 +167,8 @@ class Showcase(Sequence):
         elif s == 2:
             if how == "gesture" and self._state.get("lit"):
                 return                          # an open palm on a lit diya is just holding it
+            if how == "gesture" and now - self._state.get("snuff_t", -99) < self.sc.min_s[4]:
+                return                          # let the smoke curl play before a relight
             if not self._state.get("lit"):
                 first = "lit" not in self._state
                 self._state["lit"], self._state["lit_t"] = True, now
@@ -199,7 +206,17 @@ class Showcase(Sequence):
             self._play("lantern", 0.8)
             self._cool = k.lantern_cooldown_s
             what = "lanterns"
+        elif s == 10 and not self._state.get("quiet"):
+            fx["fireworks"].clear()
+            self._state["quiet"] = now
+            fx["lanterns"].release(tuple(palm - [0, (h.size if h is not None else 120) * self.sc.lantern_lift]))
+            self._play("chime", 0.7)
+            self._play("lantern", 0.8)
+            self.stab.reset()
+            what = "snap: quiet end"
         elif s == 10:
+            if how == "gesture":
+                return
             if self._state.get("fade") is None:
                 self._state["fade"] = now
                 what = "fade out"
@@ -269,8 +286,6 @@ class Showcase(Sequence):
 
     def draw_direct(self):
         fx, s, now, fc = self.fx, self.beat, self.now, self.cfg.render.flame
-        fx["handlight"].update(self.dt, self.tf.hands, enabled=s not in (7, 8))
-        fx["handlight"].render()
         fx["diya_row"].update(self.dt)
         fx["diya_row"].draw()
         if s == 2:
@@ -282,8 +297,8 @@ class Showcase(Sequence):
         elif s == 3:
             self._palm_diya(_ease((now - self.entered) / 0.6))
             self._aarti_step()
-        elif s == 10:
-            self._palm_diya(_ease((now - self.entered) / 0.8), glow=fc.quiet_glow, calm=1.0, embers=fc.quiet_embers)
+        elif s == 10 and self._state.get("quiet"):
+            self._palm_diya(_ease((now - self._state["quiet"]) / 0.8), glow=fc.quiet_glow, calm=1.0, embers=fc.quiet_embers)
         for sp in fx["sparklers"].values():
             if s == 4:
                 sp.render_core(fx["flames"])
