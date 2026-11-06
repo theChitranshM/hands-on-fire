@@ -99,3 +99,14 @@ Judgment calls the brief didn't cover. Simplest option that keeps the illusion c
 - **Point** uses the mean curl of the other fingers.
 - **Anar** also fires on a downward push of an open palm. Lowering the hand usually leaves the camera's view before reaching "low".
 - **Phuljhadi** wire shortened to 1.6 palm sizes, more upright, and brighter. On footage the 2.3 palm-size wire read as sparks floating detached from the hand.
+
+## Fourth round (2026-11-06): takes 8–10 and showcase mode
+- **Takes 8–10:** every beat from diya to rocket fired by gesture, with one phuljhadi timeout. Arms wide failed in 3 of 3 takes, and hold-still in 1 of 3. The room light was still on (camera brightness ~112), so the hand light is still untested in the dark.
+- **The aarti trail drew a bar between the hands:** with both palms open the diya hopped hands. The diya now stays on its hand unless that hand is lost for 0.6 s.
+- **Arms wide** also accepts palms 4.5 palm sizes apart; standing close, open arms covered only 48% of the frame. Replayed on take 8 it fires; in take 10 both hands were in frame only 3% of the time. So **the finale now starts by itself** 2 s after the firework's minimum time, and the quiet end 3 s into the finale. The gestures still trigger them earlier.
+- **Showcase mode** (`--showcase`) for filming each gesture separately:
+  - 10 scenes with no time limits and repeatable triggers.
+  - A clean stage on every scene change.
+  - F as a manual trigger, and one continuous recording.
+  - A printed log with the time of every trigger.
+  The one-take show stays as it was.

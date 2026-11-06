@@ -47,14 +47,17 @@ def render_hud(size, tf, gestures, seq, engine, stats, mapping=None):
         _txt(hud, "NO CAMERA FRAME", (30, 60), 1.0, (0, 0, 255), 2)
     x0 = cam_w + 16
     y = 34
-    nb = seq._next_index(seq.beat) if seq.beat < DONE else DONE
+    beats = seq.beats
+    last = len(beats) - 1
+    nb = seq._next_index(seq.beat) if seq.beat < last else last
     _txt(hud, f"BEAT {seq.beat}: {seq.name}", (x0, y), 0.8, (80, 220, 255), 2)
     y += 26
-    trig = BEATS[nb][2] or "auto"
-    _txt(hud, f"next: {nb} {BEATS[nb][1]}  [{trig}]", (x0, y), 0.5)
+    trig = beats[nb][2] or "auto"
+    _txt(hud, f"next: {nb} {beats[nb][1]}  [{trig}]", (x0, y), 0.5)
     y += 22
-    if trig in HINTS and seq.beat < DONE:
-        _txt(hud, HINTS[trig], (12, H - 46), 0.9, (80, 220, 255), 2)     # big performer cue
+    cue = seq.cue()
+    if cue:
+        _txt(hud, cue, (12, H - 46), 0.9, (80, 220, 255), 2)     # big performer cue
     _txt(hud, f"gestures {'ON' if seq.gestures_enabled else 'OFF (manual)'}", (x0, y), 0.5,
          (120, 255, 120) if seq.gestures_enabled else (0, 140, 255))
     y += 30

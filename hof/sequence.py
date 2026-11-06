@@ -48,6 +48,19 @@ def _ease(x):
 
 
 class Sequence:
+    beats = BEATS
+
+    def cue(self):
+        trig = BEATS[self._next_index(self.beat)][2] if self.beat < DONE else None
+        return HINTS.get(trig, "")
+
+    def trigger(self, how="manual"):
+        """F key: only the showcase uses it."""
+
+    def finish(self):
+        if self.take_start is not None:
+            self.reset()
+
     def __init__(self, cfg, engine, fx, audio=None, recorder=None, rehearse=False):
         self.cfg, self.sc = cfg, cfg.sequence
         self.engine, self.fx, self.audio, self.recorder = engine, fx, audio, recorder
@@ -150,12 +163,14 @@ class Sequence:
             self.act_hand = gestures[trig].hand
             self.goto(nxt, "gesture")
         elif trig and b >= 1:
-            if t_in > self.cfg.rehearse.beat_timeout_s + dwell and not self.missed_flagged:
+            if t_in > self.cfg.rehearse.beat_timeout_s + dwell and not self.missed_flagged and b not in sc.auto_after_s:
                 self.missed_flagged = True
                 if self.recorder:
                     self.recorder.glitch("missed_gesture", f"beat {nxt} {BEATS[nxt][1]} ({trig})")
                 if self.rehearse:
                     self.goto(nxt, "missed")
+            elif b in sc.auto_after_s and t_in > dwell + sc.auto_after_s[b]:
+                self.goto(nxt, "auto")             # by design: the finale and the quiet end come by themselves
             elif sc.fallback_s and t_in > sc.fallback_s + dwell and not self.rehearse:
                 self.goto(nxt, "timeout")
         if self.beat == 1 and t_in > sc.puja_min_s and not gestures["joined"].active and self.fx["rangoli"].active:
@@ -176,9 +191,16 @@ class Sequence:
         return True
 
     def _pick_main_hand(self, tf, gestures):
+        """The diya stays on the hand it was lit on. Take 8: with both palms open the diya hopped between hands
+        and the aarti trail drew a bar across. It only moves when its hand has been lost for a while."""
+        here = self.main_hand in tf.hands and tf.hands[self.main_hand].tracked
+        self._main_lost = 0.0 if here else getattr(self, "_main_lost", 0.0) + self.dt
+        locked = self.beat in (2, 3, 4, 5, 6, 12) and self._main_lost < self.sc.hand_switch_s
+        if locked:
+            return
         if gestures["open_palm"].active and gestures["open_palm"].hand:
             self.main_hand = gestures["open_palm"].hand
-        elif self.main_hand not in tf.hands and tf.hands:
+        elif not here and tf.hands:
             self.main_hand = next(iter(tf.hands))
 
     # ---- entering a beat --------------------------------------------------------------------

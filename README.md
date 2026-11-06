@@ -52,6 +52,7 @@ The easy way: **double-click the files in `launch/`**. Each one opens Terminal a
 | `launch/gestures.command` | see what the tracker sees, with live gesture confidence |
 | `launch/show.command` | the show |
 | `launch/rehearse.command` | loop the show and log missed gestures |
+| `launch/showcase.command` | **one effect at a time, no time limits**, for filming each gesture on its own |
 
 If macOS says the file "can't be opened because it's from an unidentified developer": right-click it → Open → Open.
 
@@ -103,8 +104,8 @@ This projector shows the image about 170 ms after the camera sees your hand. The
 | 8 | Anar | lower your open palm | SPACE / 8 |
 | 9 | Rocket | lift your hand fast | SPACE / 9 |
 | 10 | Firework | automatic after the rocket | 0 |
-| 11 | Finale | arms wide | SPACE |
-| 12 | Quiet end: sky lanterns, one diya | hold still | SPACE |
+| 11 | Finale | arms wide (or starts by itself 2 s after the firework) | SPACE |
+| 12 | Quiet end: sky lanterns, one diya | hold still (or starts by itself 3 s into the finale) | SPACE |
 
 If a gesture doesn't come, the beat saves a "missed" glitch clip after 8 s and moves on by itself after `sequence.fallback_s` (14 s), so a take never stalls. Set it to 0 to wait forever.
 
@@ -124,6 +125,7 @@ If a gesture doesn't come, the beat saves a "missed" glitch clip after 8 s and m
 | D | debug overlay: calibrated area, 9:16 safe zone, fingertip dots |
 | C | calibration check: white rings on your fingertips |
 | K | log a coffee ☕ |
+| F | showcase: fire the current scene's effect |
 | ESC | blackout (press again to come back) |
 | Q | quit |
 
@@ -132,12 +134,49 @@ If a gesture doesn't come, the beat saves a "missed" glitch clip after 8 s and m
 ```bash
 .venv/bin/python run.py              # the show
 .venv/bin/python run.py --rehearse   # loop the show, auto-restart, summary after every run
+.venv/bin/python run.py --showcase   # one effect per scene, repeatable, no time limits (for filming)
 .venv/bin/python run.py --sim        # no camera: mouse-driven fake hands
 .venv/bin/python run.py --mute       # no sound
 .venv/bin/python run.py --hud        # force the operator window on
 ```
 
 With a projector connected, the show goes fullscreen on it and the operator window (camera feed, current beat, gesture bars, fps, lag) stays on the laptop. Without one, both windows tile side by side on the laptop screen.
+
+## Showcase: film each gesture on its own
+
+```bash
+.venv/bin/python run.py --showcase
+```
+(or double-click `launch/showcase.command`)
+
+The full show runs as one take. Showcase splits it into **10 scenes** so you can film every gesture separately, as often as you like:
+
+- **Nothing times out** and nothing moves on by itself. Stay in a scene for as long as the shot needs.
+- **Every gesture is repeatable.** Each namaste re-lights the lamps; each lift launches another rocket. Film several takes of the same moment.
+- **Changing scene wipes the stage,** so each clip shows only its own effect.
+- **F** fires the scene's effect without the gesture, if one won't cooperate.
+- The terminal prints **the time of every trigger**, and the whole session is recorded to `captures/takes/`, so finding each clip later is easy.
+
+| Key | Scene | Gesture (repeat as often as you like) |
+|---|---|---|
+| 1 | Puja | namaste: lamps light one by one, rangoli, petals; part your hands to scatter |
+| 2 | Diya | open palm lights it, close your hand snuffs it, open again relights |
+| 3 | Aarti | circle the diya: light trail, a bell on every loop |
+| 4 | Phuljhadi | pinch to light (each hand its own); let go to put it out |
+| 5 | Chakri | point your index finger; it spins while you point |
+| 6 | Anar | push your open palm down: a 6 s fountain |
+| 7 | Rocket | lift your hand fast: rocket + firework, again and again |
+| 8 | Finale | open your arms wide (or F) |
+| 9 | Lanterns | lift your open palm: sky lanterns rise from it |
+| 0 | Quiet end | the last diya; F fades to black, F again brings it back |
+
+SPACE / B go to the next / previous scene. The operator window shows the scene's cue in big letters.
+
+**Shot list:**
+1. Set the filming camera once: vertical 9:16, exposure and focus locked on your palm with the diya lit (scene 2).
+2. Film each scene 3–5 times: a wide shot that shows the wall, then a close one on your hands.
+3. Then run the full show (`launch/show.command`) for the one-take version.
+4. Edit the reel from the showcase clips plus the one-take, as you prefer. Every clip is still real, live projection.
 
 ## Make it look good on camera
 

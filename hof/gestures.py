@@ -131,7 +131,9 @@ class GestureClassifier:
                 self._last_pair = (now, (L.palm_cam + R.palm_cam) / 2, s)
             cam_w = tf.image.shape[1] if tf.image is not None else self.cfg.camera.width
             sep = abs(L.palm_cam[0] - R.palm_cam[0]) / cam_w
-            c["arms_wide"] = (ramp(sep, g.arms_wide_frac * 0.8, g.arms_wide_frac), None)
+            # wide = far apart in the frame, or far apart in palm sizes (standing close, open arms leave the frame)
+            c["arms_wide"] = (max(ramp(sep, g.arms_wide_frac * 0.8, g.arms_wide_frac),
+                                  ramp(d, g.arms_wide_palms * 0.75, g.arms_wide_palms)), None)
         elif self._last_pair and now - self._last_pair[0] < g.joined_merge_s:
             # pressed-together palms often merge into one detection (or none): two hands that were closing in
             # a moment ago and now read as one hand at their midpoint (or vanish there) are joined

@@ -22,6 +22,10 @@ class Fireworks:
     def active(self):
         return bool(self._rockets or self._events)
 
+    def clear(self):
+        """Drop rockets in flight and pending bursts/crackles."""
+        self._rockets, self._events = [], []
+
     def _pal(self, palette):
         pals = self.c.palettes
         if palette is None:

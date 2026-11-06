@@ -100,6 +100,7 @@ def debug_overlay(engine, cfg, tf, mapping, calib_check):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rehearse", action="store_true")
+    ap.add_argument("--showcase", action="store_true", help="one effect per scene, repeatable, no time limits (for recording)")
     ap.add_argument("--sim", action="store_true", help="no camera; fake hands follow the mouse")
     ap.add_argument("--mute", action="store_true")
     ap.add_argument("--hud", action="store_true", help="open the operator view at start (H toggles it)")
@@ -163,7 +164,13 @@ def main():
         from hof.recorder import Recorder
         recorder = Recorder(cfg)
 
-    seq = Sequence(cfg, engine, fx, audio, recorder, rehearse=args.rehearse)
+    if args.showcase:
+        from hof.showcase import Showcase
+        seq = Showcase(cfg, engine, fx, audio, recorder)
+        seq.goto(1, "start")
+        print("[showcase] 1-9, 0 pick a scene, SPACE/B next/previous, F fires the scene's effect, R restarts the scene")
+    else:
+        seq = Sequence(cfg, engine, fx, audio, recorder, rehearse=args.rehearse)
     if args.sim:
         seq.gestures_enabled = False
     gc = GestureClassifier(cfg)
@@ -230,6 +237,8 @@ def main():
                     say(f"coffee #{recorder.coffee()} logged")
                 elif k == "ESCAPE":
                     engine.blackout = not engine.blackout
+                elif k == "F":
+                    seq.trigger("manual")
                 elif k == "L":
                     hl = fx["handlight"]
                     hl.on = not hl.on
@@ -254,8 +263,12 @@ def main():
             if seq.beat == DONE and not args.rehearse and now - seq.entered > cfg.sequence.quiet_fade_s:
                 pass  # stays black until R / SPACE / a number
 
-            if args.autoplay and seq.beat not in (9, 12) and now - seq.entered > args.autoplay and seq.beat < DONE:
+            if args.autoplay and (args.showcase or seq.beat not in (9, 12)) and now - seq.entered > args.autoplay \
+                    and seq.beat < DONE:
                 seq.advance("manual")
+            if args.autoplay and args.showcase and now - seq.entered > 0.3 and getattr(seq, "_auto_fired", None) != seq.entered:
+                seq._auto_fired = seq.entered          # testing: fire each showcase scene once
+                seq.trigger("manual")
             tf = tracker.frame_at(now + cfg.tracker.predict_extra_ms / 1000, engine.size)
             gestures = gc.update(tf, now)
             seq.update(tf, gestures, now, dt)
@@ -316,8 +329,12 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        if seq.take_start is not None:
-            seq.reset()
+        events = seq.finish()
+        if args.showcase and events:
+            print("\n=== SHOWCASE LOG (time from start: scene, trigger) ===")
+            for t, sc_, what, how in events:
+                if what != "enter":
+                    print(f"  {t:7.2f}s  {sc_:2d} {seq.beats[sc_][1]:<10} {what} ({how})")
         if args.rehearse and seq.runs:
             print("\n=== REHEARSAL TOTAL ===")
             done = [r for r in seq.runs if r["completed"]]

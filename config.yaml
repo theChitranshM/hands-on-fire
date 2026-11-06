@@ -91,7 +91,8 @@ gestures:
   cupped_max_dist: 1.6
   palms_together_max_dist: 0.9
   raise_speed: 1.6              # palm sizes per s upward (one hand)
-  arms_wide_frac: 0.55          # horizontal hand separation / camera width
+  arms_wide_frac: 0.45          # horizontal hand separation / camera width ...
+  arms_wide_palms: 4.5          # ... or palm centres this many palm sizes apart (take 8: 0.48 of the frame when close)
   still_speed: 0.45             # palm sizes per s below this = still (takes 6-7: held hands read 0.1-0.6)
 
 sequence:
@@ -104,7 +105,11 @@ sequence:
   quiet_fade_s: 2.0
   firework_target_frac: [0.5, 0.18]   # where the burst lands in projector space (x, y as fraction)
   quiet_trail_fade_s: 1.2       # quiet end: leftover sparks and embers fade out this fast, leaving only the diya
+  auto_after_s:                 # these beats move on by themselves this long after their minimum time (the gesture can still come earlier)
+    10: 2.0                     #   firework -> finale (arms wide fired in 1 of 3 real takes: both hands rarely in frame)
+    11: 3.0                     #   finale -> quiet end
   fallback_s: 14                # show mode: a beat whose gesture never comes moves on by itself after this (0 = wait forever)
+  hand_switch_s: 0.6            # the diya moves to the other hand only after its own has been lost this long
   lantern_lift: 1.6             # sky lanterns start this many palm sizes above the diya hand
   min_s:                        # each beat plays at least this long before the next gesture counts
     1: 2.0                      #   puja (rangoli + lamps)
@@ -116,6 +121,15 @@ sequence:
     7: 2.5                      #   chakri
     8: 2.5                      #   anar (motion gestures like push/lift otherwise chain on any arm movement)
   puja_min_s: 2.0               # the rangoli holds at least this long before parting the hands scatters it
+
+showcase:                       # run.py --showcase: one effect per scene, repeatable, no time limits
+  release_s: 1.0                # a sparkler goes out this long after you stop pinching
+  force_s: 6.0                  # F lights the sparkler / spins the chakri for this long
+  anar_s: 6.0                   # one anar burns this long
+  rocket_spread: 0.15           # rockets land up to this fraction of the width left/right of centre
+  rocket_cooldown_s: 1.5
+  finale_cooldown_s: 6.0
+  lantern_cooldown_s: 3.0
 
 render:
   handlight:                    # the projector lights your hands so the camera can track them in the dark
