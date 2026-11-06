@@ -63,24 +63,26 @@ mapping:
 gestures:
   on_threshold: 0.70
   off_threshold: 0.45
+  grace_ms: 200                 # a dip shorter than this doesn't restart a gesture's hold timer
   min_hold_ms:
     open_palm: 180
-    fist: 150
+    fist: 400                   # a deliberate close-and-hold; circling blurs the hand into brief false fists
     pinch: 150
     pinch_both: 150
     point: 250
     circle: 0
-    low_palm: 300
+    low_palm: 150
     raise: 60
     joined: 250
     cupped: 220
     palms_together: 250
     arms_wide: 250
-    still: 1000
+    still: 700
   finger_extended_ratio: 1.15   # tip-to-wrist / pip-to-wrist above this = extended
   fist_mean_ext: [0.55, 0.2]    # mean finger extension: fully open .. closed enough to count as a fist
   pinch_ratio: 0.38             # thumb-index distance / palm size below this = pinch
-  low_frac: 0.62                # "low palm" (anar): palm below this fraction of the projector height
+  low_frac: 0.58                # "low palm" (anar): palm below this fraction of the projector height ...
+  push_speed: 1.3               # ... or an open palm pushed down this fast (palm sizes per s)
   circle_turns: 0.75            # aarti: this many turns of travel direction within the window = a circle
   circle_window_s: 2.5
   circle_min_speed: 0.5         # palm sizes per s: slower than this doesn't count as circling
@@ -90,7 +92,7 @@ gestures:
   palms_together_max_dist: 0.9
   raise_speed: 1.6              # palm sizes per s upward (one hand)
   arms_wide_frac: 0.55          # horizontal hand separation / camera width
-  still_speed: 0.25             # palm sizes per s below this = still
+  still_speed: 0.45             # palm sizes per s below this = still (takes 6-7: held hands read 0.1-0.6)
 
 sequence:
   gestures_enabled: true
@@ -104,9 +106,30 @@ sequence:
   quiet_trail_fade_s: 1.2       # quiet end: leftover sparks and embers fade out this fast, leaving only the diya
   fallback_s: 14                # show mode: a beat whose gesture never comes moves on by itself after this (0 = wait forever)
   lantern_lift: 1.6             # sky lanterns start this many palm sizes above the diya hand
+  min_s:                        # each beat plays at least this long before the next gesture counts
+    1: 2.0                      #   puja (rangoli + lamps)
+    2: 1.0                      #   diya
+    3: 2.0                      #   aarti trail
+    4: 1.2                      #   snuff: the smoke curl
+    5: 1.0                      #   relight
+    6: 2.5                      #   phuljhadi
+    7: 2.5                      #   chakri
+    8: 2.5                      #   anar (motion gestures like push/lift otherwise chain on any arm movement)
   puja_min_s: 2.0               # the rangoli holds at least this long before parting the hands scatters it
 
 render:
+  handlight:                    # the projector lights your hands so the camera can track them in the dark
+    enabled: true               # L toggles in the show; UP/DOWN change gain
+    gain: 0.22                  # pool brightness on a tracked hand (0..1 of white)
+    color: [1.0, 0.78, 0.52]    # warm, like diya light
+    radius_palm: 1.2            # minimum pool radius in palm sizes
+    reach_pad: 1.35             # pool radius = farthest landmark from the hand centre x this
+    edge: 0.55                  # soft edge, fraction of the radius
+    search_gain: 0.5            # search light (no hand found) relative to gain
+    search_after_s: 0.4
+    zone: [0.5, 0.6]            # search light centre, fraction of frame (where your hands perform)
+    zone_radius: 0.38           # fraction of frame width
+    fade_s: 0.35
   brightness: 1.0               # global multiplier, applied last
   scale: 1.0                    # global effect size multiplier
   trail_decay: 0.82             # per-frame persistence of the particle trail layer (0 = no trails)
@@ -337,8 +360,8 @@ render:
     halo_color: [1.0, 0.6, 0.2]
     halo_gain: 0.15
     # held like a real phuljhadi: pinched at the bottom, wire angled up along the hand, burning at the far end
-    stick_palm_frac: 2.3        # wire length in palm sizes (~22 cm on a real hand)
-    grip_up_blend: 0.45         # 0 = wire continues the wrist->fingers line, 1 = straight up
+    stick_palm_frac: 1.6        # wire length in palm sizes (2.3 read as detached sparks on real footage)
+    grip_up_blend: 0.6          # 0 = wire continues the wrist->fingers line, 1 = straight up
     dir_rate: 6.0               # 1/s smoothing of the wire direction
     burn_s: 45                  # time to burn down by burn_travel (real sparklers ~40-60 s)
     burn_travel: 0.45           # fraction of the wire that burns away during a long hold
@@ -350,7 +373,7 @@ render:
     wire_gain: 1.2
     stick_dots: 44
     stick_color: [0.55, 0.42, 0.32]   # the unburnt grey coating, faintly lit
-    stick_gain: 0.55
+    stick_gain: 0.95
     ash_color: [0.6, 0.12, 0.03]
     ash_gain: 0.35
   particles:

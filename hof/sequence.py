@@ -141,12 +141,12 @@ class Sequence:
         sc, t_in, b = self.sc, now - self.entered, self.beat
         nxt = self._next_index(b)
         trig = BEATS[nxt][2] if b < DONE else None
-        dwell = {10: sc.firework_hold_s, 11: sc.finale_min_s}.get(b, MIN_DWELL_S)
+        dwell = {10: sc.firework_hold_s, 11: sc.finale_min_s}.get(b, sc.min_s.get(b, MIN_DWELL_S))
         if b == 9 and t_in >= sc.launch_flight_s:
             self.goto(10, "auto")
         elif b == 12 and t_in >= sc.quiet_hold_s + sc.quiet_fade_s:
             self.goto(DONE, "auto")
-        elif trig and self.gestures_enabled and t_in >= dwell and gestures[trig].active:
+        elif trig and self.gestures_enabled and t_in >= dwell and self._fresh(gestures[trig], trig):
             self.act_hand = gestures[trig].hand
             self.goto(nxt, "gesture")
         elif trig and b >= 1:
@@ -165,6 +165,15 @@ class Sequence:
         q = 1.0 - max(0.0, t_in - sc.quiet_hold_s) / sc.quiet_fade_s if self.beat == 12 else 1.0
         self.engine.brightness = float(self.cfg.render.brightness) * max(q, 0.0)
         self._pick_main_hand(tf, gestures)
+
+    def _fresh(self, st, trig):
+        """A new gesture made during this beat: one still held from the beat before doesn't count (takes 6-7
+        chained aarti -> snuff -> relight in 0.4 s each), and snuff/relight must be made by the diya hand."""
+        if not st.active or st.since < self.entered:
+            return False
+        if trig in ("fist", "open_palm") and self.beat in (3, 4) and st.hand not in (None, self.main_hand):
+            return False
+        return True
 
     def _pick_main_hand(self, tf, gestures):
         if gestures["open_palm"].active and gestures["open_palm"].hand:
@@ -341,6 +350,8 @@ class Sequence:
     def draw_direct(self):
         """Effects on the direct layer (flames, diyas, rangoli, petals, lanterns). Called after engine.begin_direct()."""
         fx, b, t_in, fc = self.fx, self.beat, self.now - self.entered, self.cfg.render.flame
+        fx["handlight"].update(self.dt, self.tf.hands, enabled=b not in (10,) and b != DONE)
+        fx["handlight"].render()
         fx["diya_row"].update(self.dt)
         fx["diya_row"].draw()
         if b == 2:

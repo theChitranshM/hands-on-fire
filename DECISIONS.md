@@ -73,3 +73,29 @@ Judgment calls the brief didn't cover. Simplest option that keeps the illusion c
 - **Placement:** the row of lamps spans the middle 40% of the wall so a 9:16 crop keeps it. Petals are a short, gentle shower, not a blizzard.
 - **Take videos are written by wall-clock time:** frames dropped under load are filled with repeats. The first takes played back fast (143 s of video for a 184 s take).
 - **The HUD shows a big performer cue** for the next gesture.
+
+## Third round (2026-11-06): the dark room
+- **Measured on takes 5–7:**
+
+  | Take | Room | Camera brightness | Frames with a hand found |
+  |---|---|---|---|
+  | 5 | dark | ~28 | 5.5% |
+  | 6–7 | room light on | ~105 | 33–39% |
+
+  Darkening take 7 artificially: x0.5 gave 22% and x0.25 gave 10%. Software couldn't rescue real darkness: gamma, blur, auto-stretch and their combinations reached at best 3.6% on take 5. The room light washes the projection out on camera.
+- **Decision: the projector lights the hands itself** (`render.handlight`).
+  - A flat, soft, warm pool (22% white) covers each tracked hand, centred on all 21 landmarks so the fingers are lit too.
+  - A dim search light over the performance zone fades in after 0.4 s with no hand.
+  - It reads as diya light on the skin, and the rest of the room stays black.
+  - UP/DOWN tune it live; L turns it off.
+  - **Not yet verified with the real camera.**
+- **False chaining:** in takes 6–7, aarti → snuff → relight each fired 0.4 s after the previous beat. A gesture still active from before the beat, or the *other* hand's fist or open palm, counted as new.
+  - A trigger now has to become active after its beat starts.
+  - Snuff and relight must come from the diya hand.
+- **"Hold still" never fired:** the 1 s hold kept restarting on brief tracking dips.
+  - Gestures now tolerate 200 ms dips.
+  - Still is 0.45 palm sizes per second for 0.7 s.
+  - Replayed on takes 6 and 7, it now fires (13 s and 2.8 s into the window).
+- **Point** uses the mean curl of the other fingers.
+- **Anar** also fires on a downward push of an open palm. Lowering the hand usually leaves the camera's view before reaching "low".
+- **Phuljhadi** wire shortened to 1.6 palm sizes, more upright, and brighter. On footage the 2.3 palm-size wire read as sparks floating detached from the hand.

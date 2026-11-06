@@ -17,6 +17,7 @@ from hof.render.particles import ParticleSystem, Sparkler
 from hof.render.fireworks import Fireworks
 from hof.render.rangoli import Rangoli
 from hof.render.diwali import DiyaRow, Petals, AartiTrail, Chakri, Anar, Lanterns
+from hof.render.handlight import HandLight
 from hof.gestures import GestureClassifier
 from hof.sequence import Sequence, DONE, BEATS
 from hof.mapping import Mapping
@@ -145,7 +146,7 @@ def main():
           "rangoli": Rangoli(ctx, cfg, engine.size, particles)}
     fx.update({"diya_row": DiyaRow(ctx, cfg, engine.size, fx["flames"]), "petals": Petals(ctx, cfg, engine.size),
                "aarti": AartiTrail(ctx, cfg, engine.size), "chakri": Chakri(particles, cfg), "anar": Anar(particles, cfg),
-               "lanterns": Lanterns(ctx, cfg, engine.size, fx["flames"])})
+               "lanterns": Lanterns(ctx, cfg, engine.size, fx["flames"]), "handlight": HandLight(ctx, cfg, engine.size)})
 
     audio = None
     try:
@@ -229,6 +230,14 @@ def main():
                     say(f"coffee #{recorder.coffee()} logged")
                 elif k == "ESCAPE":
                     engine.blackout = not engine.blackout
+                elif k == "L":
+                    hl = fx["handlight"]
+                    hl.on = not hl.on
+                    say(f"hand light {'ON' if hl.on else 'OFF'}")
+                elif k in ("UP", "DOWN"):
+                    hl = fx["handlight"]
+                    hl.gain = float(np.clip(hl.gain + (0.03 if k == "UP" else -0.03), 0.0, 0.6))
+                    say(f"hand light {hl.gain:.2f}")
                 elif k == "H":
                     hud_on = not hud_on
                     (glfw.show_window if hud_on else glfw.hide_window)(hud_win.win)
@@ -298,6 +307,7 @@ def main():
                          "take": recorder.take_number if recorder else 0,
                          "coffee": recorder.coffee_count if recorder else 0,
                          "muted": audio.muted if audio else True, "debug": cfg.debug.show_overlay,
+                         "handlight": f"{fx['handlight'].gain:.2f}" if fx["handlight"].on else "OFF",
                          "rehearse": rehearse_lines if args.rehearse else None,
                          "flash": flash if now < flash_until else ""}
                 hud_win.show(render_hud(tuple(cfg.display.hud_size), tf, gestures, seq, engine, stats, mapping))

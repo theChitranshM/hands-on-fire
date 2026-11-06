@@ -27,7 +27,9 @@ class GestureState:
     active: bool = False
     just_on: bool = False
     hand: str = None
+    since: float = 0.0            # when it last became active
     _above_since: float = None
+    _dip_since: float = None
     _below_since: float = None
 
 
@@ -60,9 +62,12 @@ class GestureClassifier:
                 # a closed hand: judged on the mean curl, because MediaPipe often leaves one finger half-straight
                 "fist": ramp(float(ext.mean()), self.g.fist_mean_ext[1], self.g.fist_mean_ext[0]),
                 "pinch": ramp(pinch_r, pr * 1.6, pr * 0.8),
-                "point": float(ext[0] * (1.0 - ext[1:].max())),
+                # index out, the rest mostly curled (a relaxed middle finger is normal when pointing)
+                "point": float(ext[0] * (1.0 - ext[1:].mean())),
                 "up": ramp((h.cam[WRIST, 1] - h.cam[MIDDLE_TIP, 1]) / s, 0.8, 1.5),
-                "low": ramp(h.palm[1] / max(proj_h, 1), self.g.low_frac - 0.08, self.g.low_frac),
+                # anar: palm held low, or pushed down (lowering often leaves the camera's view before "low")
+                "low": max(ramp(h.palm[1] / max(proj_h, 1), self.g.low_frac - 0.08, self.g.low_frac),
+                           ramp(h.vel_cam[1] / s, self.g.push_speed * 0.6, self.g.push_speed)),
                 "speed": float(np.linalg.norm(h.vel_cam) / s),
                 "vy": float(-h.vel_cam[1] / s)}
 
@@ -147,11 +152,14 @@ class GestureClassifier:
             hold = g.min_hold_ms.get(k, 150) / 1000
             if not st.active:
                 if conf >= g.on_threshold:
-                    st._above_since = st._above_since or now
+                    st._above_since, st._dip_since = st._above_since or now, None
                     if now - st._above_since >= hold:
-                        st.active, st.just_on, st._below_since = True, True, None
-                else:
-                    st._above_since = None
+                        st.active, st.just_on, st._below_since, st.since = True, True, None, now
+                elif st._above_since is not None:
+                    # a brief dip (noise, a dropped frame) doesn't restart the hold timer
+                    st._dip_since = st._dip_since or now
+                    if now - st._dip_since > g.grace_ms / 1000:
+                        st._above_since = st._dip_since = None
             else:
                 if conf < g.off_threshold:
                     st._below_since = st._below_since or now

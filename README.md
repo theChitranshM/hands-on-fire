@@ -63,6 +63,14 @@ If macOS says the file "can't be opened because it's from an unidentified develo
 4. **Latency:** `launch/latency.command`. It flashes the projector 50 times and times how long the camera takes to see it. Prediction uses this number.
 5. **Show:** `launch/show.command`.
 
+## Light: keep the room dark
+
+Don't turn the room light on: it washes the projection out on camera. The camera still needs to see your hands, so **the projector lights them itself**. A soft warm pool follows each hand, like diya light on skin. When no hand is found, a dim search light glows over the performance area so a hand entering it gets picked up. On real takes the camera found a hand in 5% of frames in the dark and 33–39% with the light on; the hand light gives the camera that light only where your hands are.
+
+- **UP / DOWN** make the hand light brighter or dimmer live (shown on the operator window). Go brighter if tracking drops; dimmer if it shows too much on the reel.
+- **L** turns it off, for example if you light your hands with a small lamp instead.
+- If tracking still struggles, put a dim warm lamp low and behind the camera, aimed at your hands and not the wall.
+
 ## How to stand and hold things
 
 The light is drawn the way the real objects sit, so move the way you'd hold the real thing. The show is built for **one hand** reaching into the light (only namaste and arms-wide need both). The laptop shows a big cue for the next move.
@@ -109,6 +117,8 @@ If a gesture doesn't come, the beat saves a "missed" glitch clip after 8 s and m
 | R | reset to the start |
 | 1–9, 0 | jump to beat 1–9, 10 |
 | G | gesture triggers on/off (off = keyboard only) |
+| L | hand light on/off |
+| UP / DOWN | hand light brighter / dimmer |
 | H | show/hide the operator window (with a big cue for your next move) |
 | M | mute |
 | D | debug overlay: calibrated area, 9:16 safe zone, fingertip dots |
@@ -170,7 +180,7 @@ Everything lives in **`config.yaml`**, and there are no magic numbers in the cod
 | **Show opens in a small window** | No projector was detected (see above). |
 | **Operator window missing** | Press H. |
 | **Wrong camera** | `tools/list_devices.py`, then set `camera.device`. |
-| **Tracking lost / jittery** | Open `launch/gestures.command`. Too dark: add a dim warm lamp outside the shot. Jitter: lower `tracker.one_euro.min_cutoff`. Lag on fast moves: raise `tracker.one_euro.beta`. |
+| **Tracking lost / jittery** | Press UP a few times to brighten the hand light. Stand 1–1.5 m from the camera. Still lost: a dim warm lamp low behind the camera. Jitter: lower `tracker.one_euro.min_cutoff`. Lag on fast moves: raise `tracker.one_euro.beta`. |
 | **Left and right hands swapped** | Flip `tracker.swap_handedness`. |
 | **Flame sits next to the palm** | Re-run calibrate, or nudge with the arrows in its verify step. Press C during the show to check. |
 | **Lag too high** | Re-run latency. Projector processing off, Game mode on. Move smoothly rather than snappily. |
