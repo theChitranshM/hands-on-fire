@@ -51,3 +51,25 @@ Judgment calls the brief didn't cover. Simplest option that keeps the illusion c
   - **Diya:** real proportions (~5 cm flame, ~7 cm bowl on a ~9.5 cm palm). It rests in the palm hollow, with the wick lifted by half the bowl height, and stays level with gravity whatever the hand angle.
   - **Sparkler:** gripped at the bottom of a ~22 cm wire that points along the hand, tilted up. The burning point is at the far end and creeps toward the fingers over ~45 s. A short glowing just-burnt section sits under the ball, with a faint grey stick down to the grip. The core is a small white point with thin radiating streaks, not a blob.
   - **Cupped catch:** the same real-size diya settles into the cup.
+
+## Second round (2026-11-06): one-hand show, steadier diya, more Diwali
+- **Why the gestures failed:** replaying the classifier over take 3 showed two hands tracked together in under 3% of frames. The performer reaches one arm into the light. Fist, pinch-both, cupped, raise and palms-together never fired; only open palm and arms wide did. So the show is now **one-hand first**:
+  - pinch, point, raise, low palm and circle all work with either hand.
+  - **Namaste** also counts when two hands closing in merge into one detection, or vanish at their midpoint. Pressed-together palms usually do exactly that to MediaPipe.
+- **Fist** is judged on mean finger curl, not "every finger curled", because MediaPipe often leaves one finger half-straight.
+- **Fallback:** a beat whose gesture never comes saves a glitch clip at 8 s and moves on by itself at 14 s (`sequence.fallback_s`), logged as `timeout`. A take never stalls in front of the camera.
+- **Trembling diya:** the 170 ms prediction was amplifying landmark noise. Three fixes:
+  1. Prediction now uses a 3 Hz low-passed velocity.
+  2. Prediction is speed-gated: none when the hand is still, full above 1.4 palm sizes per second.
+  3. The diya anchor gets its own One Euro stage (min_cutoff 0.5, beta 3 per palm size).
+  On take-3 footage, frame-to-frame shake went from 8.0 px to 2.4 px median and the still-hand p90 from 12.7 px to 7.3 px. A dead-zone "hold, then catch up" stabiliser was tried and measured worse (stair-stepping), so it was dropped.
+- **New beats:**
+  - Puja: deepavali row of lamps, rangoli, marigold and rose petals, shankh and bell.
+  - Aarti: a light trail, with a bell on every loop.
+  - Phuljhadi: catches flame from the diya.
+  - Chakri on the fingertip.
+  - Anar from the low palm.
+  - Sky lanterns at the quiet end, which now fades the whole picture to black.
+- **Placement:** the row of lamps spans the middle 40% of the wall so a 9:16 crop keeps it. Petals are a short, gentle shower, not a blizzard.
+- **Take videos are written by wall-clock time:** frames dropped under load are filled with repeats. The first takes played back fast (143 s of video for a 184 s take).
+- **The HUD shows a big performer cue** for the next gesture.

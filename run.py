@@ -16,6 +16,7 @@ from hof.render.flame import FlameRenderer
 from hof.render.particles import ParticleSystem, Sparkler
 from hof.render.fireworks import Fireworks
 from hof.render.rangoli import Rangoli
+from hof.render.diwali import DiyaRow, Petals, AartiTrail, Chakri, Anar, Lanterns
 from hof.gestures import GestureClassifier
 from hof.sequence import Sequence, DONE, BEATS
 from hof.mapping import Mapping
@@ -142,6 +143,9 @@ def main():
           "sparklers": {"Left": Sparkler(particles, cfg), "Right": Sparkler(particles, cfg)},
           "fireworks": Fireworks(ctx, cfg, engine.size, particles),
           "rangoli": Rangoli(ctx, cfg, engine.size, particles)}
+    fx.update({"diya_row": DiyaRow(ctx, cfg, engine.size, fx["flames"]), "petals": Petals(ctx, cfg, engine.size),
+               "aarti": AartiTrail(ctx, cfg, engine.size), "chakri": Chakri(particles, cfg), "anar": Anar(particles, cfg),
+               "lanterns": Lanterns(ctx, cfg, engine.size, fx["flames"])})
 
     audio = None
     try:
@@ -162,6 +166,7 @@ def main():
     if args.sim:
         seq.gestures_enabled = False
     gc = GestureClassifier(cfg)
+    gc.proj_h = engine.size[1]
     rehearse_lines = []
     restart_at = [None]
 
@@ -240,7 +245,7 @@ def main():
             if seq.beat == DONE and not args.rehearse and now - seq.entered > cfg.sequence.quiet_fade_s:
                 pass  # stays black until R / SPACE / a number
 
-            if args.autoplay and seq.beat not in (6, 10) and now - seq.entered > args.autoplay and seq.beat < DONE:
+            if args.autoplay and seq.beat not in (9, 12) and now - seq.entered > args.autoplay and seq.beat < DONE:
                 seq.advance("manual")
             tf = tracker.frame_at(now + cfg.tracker.predict_extra_ms / 1000, engine.size)
             gestures = gc.update(tf, now)
@@ -279,7 +284,7 @@ def main():
                     low_fps_since = None
                 if tracker.lost_events != lost_seen:
                     lost_seen = tracker.lost_events
-                    if in_show and seq.beat not in (7, 9):
+                    if in_show and seq.beat not in (10, 11):   # firework + finale need no hands
                         recorder.glitch("tracking_lost", f"beat {seq.beat} {seq.name}")
                 if not plumbing_logged and engine.is_projector and tf.image is not None:
                     plumbing_logged = True

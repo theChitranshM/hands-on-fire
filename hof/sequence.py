@@ -1,29 +1,45 @@
-"""Beats 1-10: what triggers each beat and what gets drawn while it plays.
+"""The show: what triggers each beat and what gets drawn while it plays.
 
-Beat 0 is idle (black, waiting for an open palm). Beat 11 is "done" (black, take ends).
-Every beat can be forced with the keyboard; the log records how each beat was reached.
+Beat 0 is idle (black, waiting for joined hands). The last beat is "done" (black, take ends).
+Every beat can be forced with the keyboard. If a gesture doesn't come, the beat logs a glitch and, after
+sequence.fallback_s, moves on by itself so a take never stalls. The log records how each beat was reached.
 """
+import math
 import time
 import numpy as np
 from .types import THUMB_TIP, INDEX_TIP, INDEX_MCP, WRIST
+from .tracker import Stabilizer
 
-# (number, name, trigger gesture or None for auto/none, minimum seconds in previous beat before it can fire)
+# (number, name, gesture that starts it; None = automatic)
 BEATS = [
     (0, "Idle", None),
-    (1, "Palm diya", "open_palm"),
-    (2, "Snuff", "fist"),
-    (3, "Relight", "open_palm"),
-    (4, "Sparklers", "pinch_both"),
-    (5, "Diya catch", "cupped"),
-    (6, "Launch", "raise"),
-    (7, "Firework", None),
-    (8, "Rangoli", "palms_together"),
-    (9, "Finale", "arms_wide"),
-    (10, "Quiet end", "still"),
-    (11, "Done", None),
+    (1, "Puja", "joined"),            # namaste: deepavali row lights up, rangoli blooms, petals, shankh + bell
+    (2, "Diya", "open_palm"),         # a diya lights on the palm
+    (3, "Aarti", "circle"),           # circle the diya: a light trail, a bell on every loop
+    (4, "Snuff", "fist"),
+    (5, "Relight", "open_palm"),
+    (6, "Phuljhadi", "pinch"),        # the sparkler catches from the diya
+    (7, "Chakri", "point"),           # a ground spinner whirls on the fingertip
+    (8, "Anar", "low_palm"),          # a flowerpot fountain erupts from the low palm
+    (9, "Rocket", "raise"),           # lift fast: a rocket launches from the palm
+    (10, "Firework", None),
+    (11, "Finale", "arms_wide"),
+    (12, "Quiet end", "still"),       # sky lanterns rise, one diya stays on the palm, fade to black
+    (13, "Done", None),
 ]
-DONE = 11
+DONE = len(BEATS) - 1
+HINTS = {"joined": "Join your hands in namaste", "open_palm": "Open your palm toward the light",
+         "circle": "Circle the diya slowly (aarti)", "fist": "Close your hand slowly over the flame",
+         "pinch": "Pinch thumb + index like holding a phuljhadi", "point": "Point your index finger",
+         "low_palm": "Lower your open palm", "raise": "Lift your hand up in one steady move",
+         "arms_wide": "Open both arms wide", "still": "Hold the diya still"}
 MIN_DWELL_S = 0.4
+MILESTONES = {1: ("first_puja", "First puja: hands joined, the row of diyas lit up"),
+              2: ("first_flame", "First flame on my palm"), 3: ("first_aarti", "First aarti circle"),
+              6: ("first_sparkler", "First phuljhadi lit from the diya"), 7: ("first_chakri", "First chakri spinning on my finger"),
+              8: ("first_anar", "First anar fountain from my palm"), 10: ("first_firework", "First firework burst on the wall"),
+              12: ("first_quiet_end", "First quiet ending: lanterns rising, one diya left on my palm")}
+LOOPS = {6: "sparkler_loop", 7: "chakri_loop", 8: "anar_loop"}
 
 
 def _ease(x):
@@ -42,11 +58,14 @@ class Sequence:
         self.take_start = None
         self.log = []                 # [{"beat", "name", "how", "t"}] for the current take
         self.runs = []                # rehearsal summaries
-        self.main_hand = "Right"
-        self.last_palm = None          # (pos, size) of the diya, kept through brief tracking loss
+        self.main_hand = "Right"      # the hand holding the diya
+        self.act_hand = None          # the hand that made this beat's gesture
+        self.last_palm = None         # (pos, size) of the diya, kept through brief tracking loss
         self.missed_flagged = False
-        self.on_done = None            # callback(log, completed) when a take ends
-        self._quiet_t = None
+        self.on_done = None           # callback(log, completed) when a take ends
+        self.stab = Stabilizer(cfg)
+        self._aarti = None            # (last heading, accumulated turns)
+        self.tf = None
 
     # ---- navigation -----------------------------------------------------------------------
     @property
@@ -54,10 +73,7 @@ class Sequence:
         return BEATS[self.beat][1]
 
     def _next_index(self, b):
-        n = b + 1
-        if n == 8 and not self.sc.rangoli_enabled:
-            n = 9
-        return min(n, DONE)
+        return min(b + 1, DONE)
 
     def goto(self, beat, how="manual"):
         now = time.perf_counter()
@@ -72,6 +88,8 @@ class Sequence:
             if self.recorder:
                 self.recorder.start_take()
         prev = self.beat
+        if how != "gesture":
+            self.act_hand = None
         self.beat, self.entered, self.missed_flagged = beat, now, False
         if beat >= 1 and self.take_start is not None:
             self.log.append({"beat": beat, "name": self.name, "how": how, "t": round(now - self.take_start, 2)})
@@ -85,16 +103,19 @@ class Sequence:
         self.goto(1 if self.beat == DONE else self._next_index(self.beat), how)
 
     def back(self):
-        b = self.beat - 1
-        if b == 8 and not self.sc.rangoli_enabled:
-            b = 7
-        self.goto(max(b, 0), "manual")
+        self.goto(max(self.beat - 1, 0), "manual")
 
     def reset(self):
         if self.take_start is not None and self.beat != DONE:
             self._end_take(completed=False)
-        self.fx["particles"].clear()
+        fx = self.fx
+        fx["particles"].clear()
+        fx["flames"].clear()
+        fx["petals"].clear()
+        fx["lanterns"].clear()
+        fx["diya_row"].set_on(False)
         self.engine.clear_trails()
+        self._loops(None)
         self.beat, self.entered = 0, time.perf_counter()
 
     def _end_take(self, completed):
@@ -102,7 +123,7 @@ class Sequence:
         if self.recorder:
             self.recorder.end_take(log, completed)
         manual = sum(1 for e in log if e["how"] == "manual")
-        missed = [e for e in log if e["how"] == "missed"]
+        missed = [e for e in log if e["how"] in ("missed", "timeout")]
         self.runs.append({"completed": completed, "manual": manual, "missed": [e["name"] for e in missed],
                           "duration": round(time.perf_counter() - self.take_start, 1)})
         if self.recorder and completed:
@@ -115,105 +136,128 @@ class Sequence:
 
     # ---- triggers ---------------------------------------------------------------------------
     def update(self, tf, gestures, now, dt):
-        """Check triggers, then queue this frame's effects. Call between engine layer binds via draw()."""
-        self.tf, self.now, self.dt = tf, now, dt
-        t_in = now - self.entered
-        trig = BEATS[self._next_index(self.beat)][2] if self.beat < DONE else None
-        nxt = self._next_index(self.beat)
-        dwell = {7: self.sc.firework_hold_s, 9: self.sc.finale_min_s}.get(self.beat, MIN_DWELL_S)
-        if self.beat == 6 and t_in >= self.sc.launch_flight_s:
-            self.goto(7, "auto")
-        elif self.beat == 10 and t_in >= self.sc.quiet_hold_s + self.sc.quiet_fade_s:
+        """Check triggers and timers. Drawing happens in draw_trail() / draw_direct()."""
+        self.tf, self.now, self.dt, self.gestures = tf, now, dt, gestures
+        sc, t_in, b = self.sc, now - self.entered, self.beat
+        nxt = self._next_index(b)
+        trig = BEATS[nxt][2] if b < DONE else None
+        dwell = {10: sc.firework_hold_s, 11: sc.finale_min_s}.get(b, MIN_DWELL_S)
+        if b == 9 and t_in >= sc.launch_flight_s:
+            self.goto(10, "auto")
+        elif b == 12 and t_in >= sc.quiet_hold_s + sc.quiet_fade_s:
             self.goto(DONE, "auto")
         elif trig and self.gestures_enabled and t_in >= dwell and gestures[trig].active:
+            self.act_hand = gestures[trig].hand
             self.goto(nxt, "gesture")
-        elif trig and self.beat >= 1 and t_in > self.cfg.rehearse.beat_timeout_s + dwell and not self.missed_flagged:
-            self.missed_flagged = True
-            if self.recorder:
-                self.recorder.glitch("missed_gesture", f"beat {nxt} {BEATS[nxt][1]} ({trig})")
-            if self.rehearse:
-                self.goto(nxt, "missed")
-        apart = not gestures["palms_together"].active if self.gestures_enabled \
-            else t_in > self.cfg.render.rangoli.bloom_s + 1.0
-        if self.beat == 8 and t_in > 0.6 and apart and self.fx["rangoli"].active \
-                and not getattr(self, "_scattered", False):
-            self._scattered = True
+        elif trig and b >= 1:
+            if t_in > self.cfg.rehearse.beat_timeout_s + dwell and not self.missed_flagged:
+                self.missed_flagged = True
+                if self.recorder:
+                    self.recorder.glitch("missed_gesture", f"beat {nxt} {BEATS[nxt][1]} ({trig})")
+                if self.rehearse:
+                    self.goto(nxt, "missed")
+            elif sc.fallback_s and t_in > sc.fallback_s + dwell and not self.rehearse:
+                self.goto(nxt, "timeout")
+        if self.beat == 1 and t_in > sc.puja_min_s and not gestures["joined"].active and self.fx["rangoli"].active:
             self.fx["rangoli"].scatter()
-        self.engine.trail_gain = max(0.0, 1 - t_in / self.sc.quiet_trail_fade_s) if self.beat == 10 else 1.0
+        self.engine.trail_gain = max(0.0, 1 - t_in / sc.quiet_trail_fade_s) if self.beat == 12 else 1.0
+        # the end fades the whole picture (rising lanterns included) to black, not just the diya
+        q = 1.0 - max(0.0, t_in - sc.quiet_hold_s) / sc.quiet_fade_s if self.beat == 12 else 1.0
+        self.engine.brightness = float(self.cfg.render.brightness) * max(q, 0.0)
         self._pick_main_hand(tf, gestures)
 
     def _pick_main_hand(self, tf, gestures):
-        if gestures["open_palm"].hand:
+        if gestures["open_palm"].active and gestures["open_palm"].hand:
             self.main_hand = gestures["open_palm"].hand
         elif self.main_hand not in tf.hands and tf.hands:
             self.main_hand = next(iter(tf.hands))
 
     # ---- entering a beat --------------------------------------------------------------------
+    def _loops(self, beat):
+        if self.audio:
+            for b, name in LOOPS.items():
+                self.audio.loop(name, b == beat)
+
     def _on_enter(self, beat, prev):
-        fx, a = self.fx, self.audio
+        fx, a, sc = self.fx, self.audio, self.sc
         play = (lambda n, v=1.0: a.play(n, v)) if a else (lambda *x: None)
-        size = self.engine.size
-        if beat in (1, 3):
+        W, H = self.engine.size
+        self._loops(beat)
+        if beat == 1:
+            fx["diya_row"].light()
+            fx["petals"].shower()
+            mid = self._mid_palms()
+            mid = np.array([W * 0.5, H * 0.55]) if mid is None else mid
+            if sc.rangoli_enabled:
+                fx["rangoli"].bloom(tuple(mid), self._mean_size())
+            play("shankh", 0.8)
+            play("bell_ring", 0.6)
+        if prev == 1 and beat != 1 and fx["rangoli"].active:
+            fx["rangoli"].scatter()
+        if beat == 2:
+            play("match", 0.8)
             play("ignite")
-        if beat == 3 and self.last_palm is not None:       # relight: a puff of sparks off the wick
-            fc = self.cfg.render.flame
-            pos, sz = self.last_palm
-            n = int(fc.relight_sparks)
-            fx["particles"].emit(np.array(pos, "f4") + [0, -sz * fc.size_palm_frac * 0.15], n, speed=tuple(fc.relight_speed),
-                                 angle=(-2.9, -0.25), life=(0.45, 1.1), size=(2.2, 3.8), color_hot=(1.0, 0.92, 0.6), color_cool=(1.0, 0.4, 0.08),
-                                 gravity=320, drag=1.5, twinkle=0.7, stretch=1.6, branch=0.3, branch_kind=0)
-        if beat == 2 and self.last_palm is not None:
+            self.stab.reset()
+        if beat == 3:
+            self._aarti = None
+            play("bell", 0.7)
+        if prev == 3:
+            fx["aarti"].stop()
+        if beat == 4 and self.last_palm is not None:
             fx["flames"].snuff(*self.last_palm)
             play("snuff")
+        if beat == 5:
+            play("ignite")
+            if self.last_palm is not None:          # relight: a puff of sparks off the wick
+                fc = self.cfg.render.flame
+                pos, sz = self.last_palm
+                fx["particles"].emit(np.array(pos, "f4") + [0, -sz * fc.size_palm_frac * 0.15], int(fc.relight_sparks),
+                                     speed=tuple(fc.relight_speed), angle=(-2.9, -0.25), life=(0.45, 1.1), size=(2.2, 3.8),
+                                     color_hot=(1.0, 0.92, 0.6), color_cool=(1.0, 0.4, 0.08), gravity=320, drag=1.5,
+                                     twinkle=0.7, stretch=1.6, branch=0.3, branch_kind=0)
         if beat == 6:
-            start = self._mid_palms()
-            start = np.array(size) * [0.5, 0.8] if start is None else start
-            tgt = np.array(self.sc.firework_target_frac) * size
-            fx["fireworks"].launch(tuple(start), tuple(tgt), self.sc.launch_flight_s)
-        if beat == 8:
-            self._scattered = False
-            mid = self._mid_palms()
-            mid = np.array(size) * [0.5, 0.6] if mid is None else mid
-            fx["rangoli"].bloom(tuple(mid), self._mean_size())
-            play("bloom")
-        if prev == 8 and beat != 8:
-            fx["rangoli"].scatter()
-        if beat >= 9 and fx["rangoli"].active and fx["rangoli"].state == "bloom":
-            fx["rangoli"].scatter()
+            self._lit = set()                       # sparklers catch from the diya as each hand starts pinching
         if beat == 9:
-            fx["fireworks"].finale(self.sc.finale_min_s + 1.0)
-        if beat == 10:
-            self._quiet_t = time.perf_counter()
+            h = self._hand(self.act_hand)
+            start = h.palm if h is not None else np.array([W * 0.5, H * 0.8])
+            tgt = np.array(sc.firework_target_frac) * [W, H]
+            fx["fireworks"].launch(tuple(start), tuple(tgt), sc.launch_flight_s)
+        if beat == 11:
+            fx["fireworks"].finale(sc.finale_min_s + 1.0)
+        if beat == 12:
+            h = self._hand()
+            src = h.palm - [0, h.size * sc.lantern_lift] if h is not None else np.array([W * 0.5, H * 0.6])
+            fx["lanterns"].release(tuple(src))          # from just above the palm, so the last diya stays clear
+            fx["diya_row"].set_on(False)
+            play("lantern", 0.8)
             play("chime", 0.7)
+            self.stab.reset()
         if beat in (0, DONE):
             fx["flames"].clear()
+            fx["diya_row"].set_on(False)
+            fx["lanterns"].clear()
+            fx["petals"].clear()
         if beat == DONE:
             fx["particles"].clear()
             self.engine.clear_trails()
-        if beat == DONE or beat == 0:
-            if a:
-                a.loop("sparkler_loop", False)
-        if self.recorder:
-            m = {1: ("first_flame", "First flame on my palm"), 4: ("first_sparkler", "First sparklers on both hands"),
-                 7: ("first_firework", "First firework burst on the wall"), 8: ("first_rangoli", "First rangoli bloom"),
-                 10: ("first_quiet_end", "First quiet ending: one diya left on my palm")}.get(beat)
-            if m and self.tf_has_hands():
-                self.recorder.milestone(*m)
+        if self.recorder and beat in MILESTONES and self.tf_has_hands():
+            self.recorder.milestone(*MILESTONES[beat])
 
     def tf_has_hands(self):
-        tf = getattr(self, "tf", None)
-        return bool(tf and tf.hands)
+        return bool(self.tf and self.tf.hands)
 
-    # ---- drawing ----------------------------------------------------------------------------
+    # ---- helpers ----------------------------------------------------------------------------
     def _hand(self, label=None):
+        if not self.tf:
+            return None
         return self.tf.hands.get(label or self.main_hand) or (next(iter(self.tf.hands.values())) if self.tf.hands else None)
 
     def _mean_size(self):
-        hs = list(self.tf.hands.values()) if getattr(self, "tf", None) else []
+        hs = list(self.tf.hands.values()) if self.tf else []
         return float(np.mean([h.size for h in hs])) if hs else self.engine.size[1] * 0.12
 
     def _mid_palms(self):
-        hs = list(self.tf.hands.values()) if getattr(self, "tf", None) else []
+        hs = list(self.tf.hands.values()) if self.tf else []
         if len(hs) == 2:
             return (hs[0].palm + hs[1].palm) / 2
         return hs[0].palm if hs else None
@@ -226,7 +270,8 @@ class Sequence:
     def _palm_diya(self, intensity, flare=0.0, glow=1.0, calm=0.0, embers=1.0):
         h = self._hand()
         if h is not None:
-            self.last_palm = (tuple(self._seat(h.palm, h.size)), h.size)
+            seat = self.stab(self._seat(h.palm, h.size), h.size, self.dt)
+            self.last_palm = (tuple(seat), h.size)
             intensity *= h.presence
         if self.last_palm is None:
             return
@@ -234,60 +279,100 @@ class Sequence:
             intensity = 0.0
         if intensity > 0.01:
             vel = h.vel if h is not None else (0.0, 0.0)
-            self.fx["flames"].add(self.last_palm[0], self.last_palm[1], intensity, flare, diya=True, seed=0.0, vel=vel, glow=glow, calm=calm, embers=embers)
+            self.fx["flames"].add(self.last_palm[0], self.last_palm[1], intensity, flare, diya=True, seed=0.0, vel=vel,
+                                  glow=glow, calm=calm, embers=embers)
 
+    def _aarti_step(self):
+        """Light trail of the diya while circling; a ring pulse + bell on every full loop."""
+        h = self._hand()
+        if h is None or self.last_palm is None:
+            return
+        self.fx["aarti"].add(self.last_palm[0], self.now)
+        v = h.vel_cam
+        if np.linalg.norm(v) / max(h.size_cam, 1e-3) < self.cfg.gestures.circle_min_speed:
+            return
+        a = math.atan2(v[1], v[0])
+        if self._aarti is None:
+            self._aarti = (a, 0.0)
+            return
+        last, turns = self._aarti
+        d = (a - last + math.pi) % (2 * math.pi) - math.pi
+        new = turns + abs(d) / (2 * math.pi)
+        if int(new) > int(turns):
+            self.fx["aarti"].pulse(self.last_palm[0])
+            if self.audio:
+                self.audio.play("bell", 0.6)
+        self._aarti = (a, new)
+
+    # ---- drawing ----------------------------------------------------------------------------
     def draw_trail(self):
         """Effects on the trail layer (sparks). Called after engine.begin_trail()."""
         fx, b, t_in, dt = self.fx, self.beat, self.now - self.entered, self.dt
-        spark_int = {4: 1.0, 5: max(0.0, 0.3 * (1 - t_in / 1.5))}.get(b, 0.0)
+        spark_int = 1.0 if b == 6 else (max(0.0, 1 - t_in / 0.6) if b == 7 else 0.0)
         for label in ("Left", "Right"):
             h = self.tf.hands.get(label)
-            active = h is not None and spark_int > 0.01
-            pos = (h.proj[THUMB_TIP] + h.proj[INDEX_TIP]) / 2 if h is not None else (0, 0)
-            vel = h.vel if h is not None else (0, 0)
-            point = (h.proj[INDEX_MCP] - h.proj[WRIST]) if h is not None else None   # where the hand points
-            fx["sparklers"][label].update(dt, tuple(pos), tuple(vel), active,
-                                          spark_int * (h.presence if h is not None else 0), direction=point,
-                                          length=h.size * self.cfg.render.sparkler.stick_palm_frac if h is not None else None)
-        if self.audio:
-            self.audio.loop("sparkler_loop", spark_int > 0.05, volume=spark_int)
+            sp = fx["sparklers"][label]
+            # one hand pinching is enough; a second hand lights its own sparkler when it pinches too
+            on = h is not None and spark_int > 0.01 and (label == self.act_hand or label in getattr(self, "_lit", ())
+                                                          or self._pinching(h)
+                                                          or (self.act_hand is None and label == self.main_hand))
+            if on and b == 6 and label not in self._lit:
+                self._lit.add(label)
+                sp.ignite()
+            grip = (h.proj[THUMB_TIP] + h.proj[INDEX_TIP]) / 2 if h is not None else (0, 0)
+            sp.update(dt, tuple(grip), tuple(h.vel) if h is not None else (0, 0), on,
+                      spark_int * (h.presence if h is not None else 0),
+                      direction=(h.proj[INDEX_MCP] - h.proj[WRIST]) if h is not None else None,
+                      length=h.size * self.cfg.render.sparkler.stick_palm_frac if h is not None else None)
+        h = self._hand(self.act_hand) if b in (7, 8) else None
+        fx["chakri"].update(dt, tuple(h.proj[INDEX_TIP]) if (h is not None and b == 7) else (0, 0),
+                            b == 7 and h is not None, h.presence if h is not None else 0.0, size=h.size if h is not None else None)
+        fx["anar"].update(dt, tuple(self._seat(h.palm, h.size)) if (h is not None and b == 8) else (0, 0),
+                          b == 8 and h is not None, h.presence if h is not None else 0.0, size=h.size if h is not None else None)
         fx["particles"].update(dt)
         fx["fireworks"].update(dt, self.now)
         fx["particles"].render()
         fx["fireworks"].render()
 
+    def _pinching(self, h):
+        st = self.gestures["pinch"]
+        return st.active and st.hand == h.label
+
     def draw_direct(self):
-        """Effects on the direct layer (flames, diyas, rangoli). Called after engine.begin_direct()."""
-        fx, b, t_in = self.fx, self.beat, self.now - self.entered
-        if b == 1:
+        """Effects on the direct layer (flames, diyas, rangoli, petals, lanterns). Called after engine.begin_direct()."""
+        fx, b, t_in, fc = self.fx, self.beat, self.now - self.entered, self.cfg.render.flame
+        fx["diya_row"].update(self.dt)
+        fx["diya_row"].draw()
+        if b == 2:
             self._palm_diya(_ease(t_in / 0.4), flare=max(0.0, 1 - t_in / 0.5) * 0.5)
-        elif b == 2:
-            self._palm_diya(max(0.0, 1 - t_in / 0.25))
         elif b == 3:
-            self._palm_diya(1.0, flare=max(0.0, 1 - t_in / 0.6) * self.cfg.render.flame.relight_flare)
+            self._palm_diya(1.0)
+            self._aarti_step()
         elif b == 4:
-            self._palm_diya(max(0.0, 1 - t_in / 0.4))
-        elif b in (5, 6):
-            mid = self._mid_palms()
-            if mid is not None:
-                pres = min(h.presence for h in self.tf.hands.values())
-                if b == 5:
-                    fx["flames"].add(tuple(self._seat(mid, self._mean_size())), self._mean_size(), _ease(t_in / 0.5) * pres,
-                                     flare=max(0.0, 1 - t_in / 0.4) * 0.6, diya=True, seed=3.0)
-                else:  # flame has left with the rocket; the empty diya cools down
-                    fx["flames"].add(tuple(self._seat(mid, self._mean_size())), self._mean_size(), 0.0, diya=True, seed=3.0)
-        elif b == 10:
-            q = self.sc
-            fade = 1.0 if t_in < q.quiet_hold_s else max(0.0, 1 - (t_in - q.quiet_hold_s) / q.quiet_fade_s)
-            self._palm_diya(_ease(t_in / 0.8) * fade, glow=self.cfg.render.flame.quiet_glow, calm=1.0, embers=self.cfg.render.flame.quiet_embers)
+            self._palm_diya(max(0.0, 1 - t_in / 0.25))
+        elif b == 5:
+            self._palm_diya(1.0, flare=max(0.0, 1 - t_in / 0.6) * fc.relight_flare)
+        elif b == 6:
+            self._palm_diya(max(0.0, 1 - t_in / 0.6))      # the flame passes to the sparkler
+        elif b == 12:
+            sc = self.sc
+            fade = 1.0 if t_in < sc.quiet_hold_s else max(0.0, 1 - (t_in - sc.quiet_hold_s) / sc.quiet_fade_s)
+            self._palm_diya(_ease(t_in / 0.8) * fade, glow=fc.quiet_glow, calm=1.0, embers=fc.quiet_embers)
         for s in fx["sparklers"].values():
-            if b in (4, 5):
+            if b in (6, 7):
                 s.render_core(fx["flames"])
+        if b == 7:
+            fx["chakri"].render_core(fx["flames"])
+        if b == 8:
+            fx["anar"].render_core(fx["flames"])
         fx["flames"].update(self.dt, self.now)
         fx["flames"].render()
-        if b == 8 or fx["rangoli"].active:
+        if fx["rangoli"].active:
             mid = self._mid_palms()
-            if mid is not None and b == 8 and not getattr(self, "_scattered", False):
+            if mid is not None and b == 1:
                 fx["rangoli"].set_center(tuple(mid))
             fx["rangoli"].update(self.dt, self.now)
             fx["rangoli"].render()
+        for k in ("aarti", "petals", "lanterns"):
+            fx[k].update(self.dt)
+            fx[k].render()

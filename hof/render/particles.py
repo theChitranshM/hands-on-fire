@@ -259,6 +259,23 @@ class Sparkler:
             self.p.emit(pts[nm:], 0, speed=(c.speed * 0.3, c.speed * 0.9), size=(c.size * 1.3, c.size * 2.0),
                         color_hot=(1.0, 1.0, 1.0), color_cool=hot, **{**base, "life": (c.life[0], c.life[1] * 0.9)})
 
+    def ignite(self):
+        """The sparkler catches flame (e.g. lit from the diya): a bright flare and a burst of sparks at the burning tip,
+        then update() burns it normally."""
+        c = self.c
+        if self.grip is None:
+            return
+        tip = self.pos if self.pos is not None else self.grip + self._dir * self._len
+        r = self.p.rng
+        self.p.emit(tip, 4, speed=(0, 20), life=(0.1, 0.28), size=(c.core_radius * 2.2, c.core_radius * 3.2), stretch=0.0, fade=0.01,
+                    color_hot=(1.0, 0.98, 0.9), color_cool=tuple(c.halo_color))        # the flare: a few big white-hot puffs
+        n = int(c.rate * 0.1)
+        hot, cool = tuple(c.star_color), tuple(c.color_cool)
+        self.p.emit(tip, n, speed=(c.speed * 0.3, c.speed * 1.1), life=(c.life[0], c.life[1] * 1.1), size=(c.size * 0.7, c.size * 1.5),
+                    color_hot=hot, color_cool=cool, gravity=c.gravity, drag=c.drag * 0.8, stretch=c.stretch, twinkle=c.twinkle,
+                    branch=c.star_frac * 2, branch_kind=0)
+        self._acc += c.rate * 0.12 * r.random()
+
     def render_core(self, flame_renderer=None):
         """Queue the white-hot burning point and the glowing wire (needs a FlameRenderer; call before flames.render())."""
         if flame_renderer is None or not self.active or self.pos is None:

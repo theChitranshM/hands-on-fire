@@ -61,6 +61,7 @@ class _Slot:
         e = cfg.tracker.one_euro
         self.filt = OneEuro(e.min_cutoff, e.beta, e.d_cutoff)
         self.x = self.dx = None
+        self.v = None            # low-passed velocity used for prediction (raw dx is too noisy to extrapolate 170 ms)
         self.p_right = 0.5
         self.last_seen = 0.0
         self.t = 0.0
@@ -146,6 +147,11 @@ class Tracker:
                 slot.p_right = 1.0 if lab == "Right" else 0.0
             free.remove(slot)
             slot.x, slot.dx = slot.filt(pts, t)
+            if slot.v is None:
+                slot.v = slot.dx.copy()
+            else:
+                a = 1.0 - math.exp(-max(t - slot.t, 1e-3) * 2 * math.pi * tc.predict_vel_cutoff)
+                slot.v += a * (slot.dx - slot.v)
             k = tc.handedness_ema
             slot.p_right = slot.p_right * (1 - k) + (1.0 if lab == "Right" else 0.0) * k
             slot.last_seen, slot.t, slot.score = t, t, score
@@ -160,7 +166,7 @@ class Tracker:
         """TrackFrame for a frame about to be shown at perf_counter time `now`, in projector px."""
         tc = self.cfg.tracker
         with self.lock:
-            snap = [(s.x.copy(), s.dx.copy(), s.p_right, s.last_seen, s.score)
+            snap = [(s.x.copy(), s.v.copy(), s.p_right, s.last_seen, s.score)
                     for s in self.slots if s.x is not None]
             img, ft, infer = self.image, self.frame_t, self.infer_ms
         lead_ms = 0.0
@@ -172,7 +178,12 @@ class Tracker:
             if tc.predict and tracked:
                 lead = (now - seen) + (self.latency_ms + tc.predict_extra_ms) / 1000
                 lead = min(lead, tc.predict_max_ms / 1000)
-                xp = x + dx * lead * tc.predict_vel_damping
+                # gate by speed: a still hand gets no extrapolation, so landmark noise isn't amplified into tremble
+                size_c = max(float(np.linalg.norm(x[WRIST, :2] - x[MIDDLE_MCP, :2])), 1.0)
+                speed = float(np.linalg.norm(dx[PALM_IDS, :2].mean(0))) / size_c
+                lo, hi = tc.predict_gate
+                gate = float(np.clip((speed - lo) / max(hi - lo, 1e-6), 0.0, 1.0))
+                xp = x + dx * lead * tc.predict_vel_damping * gate
                 lead_ms = max(lead_ms, lead * 1000)
             else:
                 xp = x
@@ -207,3 +218,22 @@ class Tracker:
         self.running = False
         self.th.join(timeout=1)
         self.landmarker.close()
+
+
+class Stabilizer:
+    """Extra One Euro stage for objects resting on the hand (the diya): very smooth while the hand is still, loosening
+    with speed so it doesn't lag a moving hand. beta is in palm sizes, so it behaves the same at any distance."""
+
+    def __init__(self, cfg):
+        self.c = cfg.tracker.stabilize
+        self.f = OneEuro(self.c.min_cutoff, self.c.beta, self.c.d_cutoff)
+        self.t = 0.0
+
+    def __call__(self, pos, size, dt):
+        """pos px, size = palm size px. Returns the stabilised position."""
+        self.t += dt
+        self.f.beta = self.c.beta / max(size, 1.0)
+        return self.f(np.asarray(pos, np.float64), self.t)[0].copy()
+
+    def reset(self):
+        self.f = OneEuro(self.c.min_cutoff, self.c.beta, self.c.d_cutoff)

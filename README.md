@@ -1,6 +1,6 @@
 # Hands on Fire 🪔
 
-**Diwali, projected onto your hands.** A diya flame sits on your palm. Close your fist and it goes out. Pinch, and sparklers burn from your fingers. Cup your hands and a rocket launches, and fireworks burst on the wall above you. At the end, one small diya stays glowing in your palm.
+**Diwali, projected onto your hands.** Join your hands in namaste and a row of diyas lights up across the wall. Open your palm and a clay diya sits in it; circle it for the aarti. Pinch, and a phuljhadi catches from the diya. Point, and a chakri spins on your fingertip. Lower your palm for an anar fountain, lift it to launch a rocket, open your arms for the finale. At the end, sky lanterns rise and one small diya stays glowing in your palm.
 
 It all runs live, in one take, with no editing: a MacBook camera tracks your hands, the Mac renders the light, and a cheap projector paints it back onto you.
 
@@ -65,35 +65,40 @@ If macOS says the file "can't be opened because it's from an unidentified develo
 
 ## How to stand and hold things
 
-The light is drawn the way the real objects sit, so move the way you'd hold the real thing:
+The light is drawn the way the real objects sit, so move the way you'd hold the real thing. The show is built for **one hand** reaching into the light (only namaste and arms-wide need both). The laptop shows a big cue for the next move.
 
 - **Stand close:** about **1–1.5 m** from the camera and projector. Your hands need to be big in the camera frame. From across the room the tracker keeps losing them, and the projection is dimmer too.
-- **Diya:** palm open and cupped slightly, tilted toward the projector at chest height, like offering a diya to someone. The clay diya sits in the hollow of your palm with its flame always pointing straight up, however your hand turns. Move it slowly; a real flame would blow out if you swung it.
-- **Snuff:** close your fingers over it, slowly.
-- **Sparklers (phuljhadi):** pinch thumb and index finger as if holding the bottom end of the wire. The wire runs up from your fingers along the direction your hand points, burning at the far tip, and the burning point creeps down toward your fingers as it burns. Tilt your hands up and out like you would with a real one, and draw slow arcs: the sparks trail behind.
-- **Diya catch:** bring both hands together into a cup, as if receiving a diya. It settles into the cup.
-- **Launch:** lift the cupped hands upward in one steady motion. Don't flick.
-- **Finale:** open your arms wide, slowly.
-- **Quiet end:** hold one palm still with the diya and let everything else fade.
+- **Puja:** join your hands in namaste in front of your chest. A row of diyas lights up across the wall one by one (*deepavali* means "row of lamps"), a rangoli blooms at your hands, marigold petals fall, and the conch and bell sound. Part your hands and the rangoli scatters.
+- **Diya:** open your palm, tilted toward the projector at chest height like offering a diya. The clay diya rests in the hollow of your palm, its flame always pointing straight up. Move slowly; a real flame would blow out if you swung it.
+- **Aarti:** circle the diya slowly. It leaves a golden light trail like a long-exposure photo, and the bell rings on every loop.
+- **Snuff / relight:** close your hand slowly over the flame, then open it again.
+- **Phuljhadi (sparkler):** pinch thumb and index as if holding the bottom end of the wire. The flame passes from the diya to the sparkler tip. The wire runs up from your fingers along where your hand points, and the burning point creeps toward your fingers. Draw slow arcs. A second hand that pinches lights its own.
+- **Chakri:** point your index finger. A ground spinner whirls on your fingertip, its sparks shifting gold → green → red.
+- **Anar:** lower your open palm. A flowerpot fountain erupts upward from it.
+- **Rocket:** lift your hand up in one steady move. A rocket launches from your palm and bursts on the wall.
+- **Finale:** open both arms wide, slowly.
+- **Quiet end:** hold the diya still. Sky lanterns (akash kandil) rise from above your hand, everything else fades, one diya stays, and then everything fades to black.
 
-This projector shows the image about 170 ms after the camera sees your hand. The software predicts where your hand is going, so smooth, steady movement keeps the light locked on; only sudden stops show the lag.
+This projector shows the image about 170 ms after the camera sees your hand. The software predicts where your hand is going and steadies the diya when your hand is still, so smooth movement keeps the light locked on.
 
 ## The show
 
-About 15 seconds, all driven by gestures. **Every beat also has a keyboard key**, so a missed gesture never ruins a take.
-
 | # | Beat | Gesture | Key |
 |---|---|---|---|
-| 1 | Palm diya | open palm | SPACE / 1 |
-| 2 | Snuff | close your fist | SPACE / 2 |
-| 3 | Relight | open your palm again | SPACE / 3 |
-| 4 | Sparklers | pinch (thumb + index) with both hands | SPACE / 4 |
-| 5 | Diya catch | cup both hands together | SPACE / 5 |
-| 6 | Launch | raise the cupped hands quickly | SPACE / 6 |
-| 7 | Firework | automatic after the launch | 7 |
-| 8 | Rangoli | palms together in front of your chest, then open them | SPACE / 8 |
-| 9 | Finale | arms wide | SPACE / 9 |
-| 10 | Quiet end | hold still for about 1 second | SPACE / 0 |
+| 1 | Puja: row of lamps, rangoli, petals | namaste (hands joined) | SPACE / 1 |
+| 2 | Diya | open palm | SPACE / 2 |
+| 3 | Aarti | circle the diya | SPACE / 3 |
+| 4 | Snuff | close your hand | SPACE / 4 |
+| 5 | Relight | open your palm again | SPACE / 5 |
+| 6 | Phuljhadi | pinch thumb + index (either hand) | SPACE / 6 |
+| 7 | Chakri | point your index finger | SPACE / 7 |
+| 8 | Anar | lower your open palm | SPACE / 8 |
+| 9 | Rocket | lift your hand fast | SPACE / 9 |
+| 10 | Firework | automatic after the rocket | 0 |
+| 11 | Finale | arms wide | SPACE |
+| 12 | Quiet end: sky lanterns, one diya | hold still | SPACE |
+
+If a gesture doesn't come, the beat saves a "missed" glitch clip after 8 s and moves on by itself after `sequence.fallback_s` (14 s), so a take never stalls. Set it to 0 to wait forever.
 
 ### Controls (either window)
 
@@ -104,7 +109,7 @@ About 15 seconds, all driven by gestures. **Every beat also has a keyboard key**
 | R | reset to the start |
 | 1–9, 0 | jump to beat 1–9, 10 |
 | G | gesture triggers on/off (off = keyboard only) |
-| H | show/hide the operator window |
+| H | show/hide the operator window (with a big cue for your next move) |
 | M | mute |
 | D | debug overlay: calibrated area, 9:16 safe zone, fingertip dots |
 | C | calibration check: white rings on your fingertips |

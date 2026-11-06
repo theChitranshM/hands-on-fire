@@ -2,7 +2,7 @@
 import cv2
 import numpy as np
 from .gestures import GESTURES
-from .sequence import BEATS
+from .sequence import BEATS, DONE, HINTS
 
 _BONES = [(0, 1), (1, 2), (2, 3), (3, 4), (0, 5), (5, 6), (6, 7), (7, 8), (5, 9), (9, 10), (10, 11), (11, 12),
           (9, 13), (13, 14), (14, 15), (15, 16), (13, 17), (17, 18), (18, 19), (19, 20), (0, 17)]
@@ -47,12 +47,14 @@ def render_hud(size, tf, gestures, seq, engine, stats, mapping=None):
         _txt(hud, "NO CAMERA FRAME", (30, 60), 1.0, (0, 0, 255), 2)
     x0 = cam_w + 16
     y = 34
-    nb = seq._next_index(seq.beat) if seq.beat < 11 else 11
+    nb = seq._next_index(seq.beat) if seq.beat < DONE else DONE
     _txt(hud, f"BEAT {seq.beat}: {seq.name}", (x0, y), 0.8, (80, 220, 255), 2)
     y += 26
     trig = BEATS[nb][2] or "auto"
     _txt(hud, f"next: {nb} {BEATS[nb][1]}  [{trig}]", (x0, y), 0.5)
     y += 22
+    if trig in HINTS and seq.beat < DONE:
+        _txt(hud, HINTS[trig], (12, H - 46), 0.9, (80, 220, 255), 2)     # big performer cue
     _txt(hud, f"gestures {'ON' if seq.gestures_enabled else 'OFF (manual)'}", (x0, y), 0.5,
          (120, 255, 120) if seq.gestures_enabled else (0, 140, 255))
     y += 30
@@ -87,8 +89,8 @@ def render_hud(size, tf, gestures, seq, engine, stats, mapping=None):
         for r in stats["rehearse"][-4:]:
             _txt(hud, r, (x0, y), 0.42)
             y += 18
-    keys = "SPACE next  B back  R reset  1-0 jump  G gestures  M mute  D debug  C calib  K coffee  ESC blackout  Q quit"
+    keys = "SPACE next  B back  R reset  1-0 jump  G gestures  H hud  M mute  D debug  C calib  K coffee  ESC blackout  Q quit"
     _txt(hud, keys, (12, H - 12), 0.45, (180, 180, 180))
     if stats.get("flash"):
-        _txt(hud, stats["flash"], (12, H - 40), 0.7, (0, 220, 255), 2)
+        _txt(hud, stats["flash"], (12, H - 84), 0.7, (0, 220, 255), 2)
     return hud

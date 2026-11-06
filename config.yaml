@@ -30,13 +30,19 @@ tracker:
   swap_handedness: true       # MediaPipe assumes a selfie (mirrored) image; our camera is not mirrored
   gamma: 0.55                 # brighten shadows before tracking (1 = off). 0.40 and 0.55 tie on footage; 0.70 is worse
   one_euro:
-    min_cutoff: 1.2           # Hz. lower = smoother at rest
+    min_cutoff: 0.7           # Hz. lower = steadier at rest (diya trembled at 1.2)
     beta: 0.02                # higher = less lag when moving fast
     d_cutoff: 1.0
   predict: true
   predict_extra_ms: 8         # render-to-swap time: the frame shows at the next vsync, about half a frame later
   predict_max_ms: 230         # R4: measured 174 ms median camera-to-photon (+inference), so the cap must exceed that
   predict_vel_damping: 0.85   # 1 = full linear extrapolation
+  predict_vel_cutoff: 3.0     # Hz low-pass on the velocity that drives prediction
+  predict_gate: [0.35, 1.4]   # palm sizes/s: below lo no prediction (still hand), above hi full prediction
+  stabilize:                  # extra One Euro on objects resting on the hand (the diya)
+    min_cutoff: 0.5           # Hz while still: lower = steadier diya
+    beta: 3.0                 # per palm-size/s: how fast it loosens when the hand moves (footage sweep: best still/moving trade-off)
+    d_cutoff: 1.0
   loss_hold_ms: 120           # hold last pose this long before fading
   loss_fade_ms: 200           # then fade presence to 0 over this
   slot_match_px: 0.25         # max jump (fraction of camera width) to keep a hand in its slot
@@ -61,29 +67,44 @@ gestures:
     open_palm: 180
     fist: 150
     pinch: 150
-    cupped: 220
+    pinch_both: 150
+    point: 250
+    circle: 0
+    low_palm: 300
     raise: 60
+    joined: 250
+    cupped: 220
     palms_together: 250
     arms_wide: 250
     still: 1000
   finger_extended_ratio: 1.15   # tip-to-wrist / pip-to-wrist above this = extended
+  fist_mean_ext: [0.55, 0.2]    # mean finger extension: fully open .. closed enough to count as a fist
   pinch_ratio: 0.38             # thumb-index distance / palm size below this = pinch
-  cupped_max_dist: 1.6          # palm-centre distance / palm size
+  low_frac: 0.62                # "low palm" (anar): palm below this fraction of the projector height
+  circle_turns: 0.75            # aarti: this many turns of travel direction within the window = a circle
+  circle_window_s: 2.5
+  circle_min_speed: 0.5         # palm sizes per s: slower than this doesn't count as circling
+  joined_dist: 1.1              # namaste: palm-centre distance / palm size
+  joined_merge_s: 0.7           # two hands closing in, then merging into one detection within this long = joined
+  cupped_max_dist: 1.6
   palms_together_max_dist: 0.9
-  raise_speed: 1.1              # palm sizes per second upward (camera space)
+  raise_speed: 1.6              # palm sizes per s upward (one hand)
   arms_wide_frac: 0.55          # horizontal hand separation / camera width
-  still_speed: 0.25             # palm sizes per second below this = still
+  still_speed: 0.25             # palm sizes per s below this = still
 
 sequence:
   gestures_enabled: true
-  rangoli_enabled: true         # CUT if R1 brightness test says thin visuals don't read
+  rangoli_enabled: true         # rangoli blooms at the joined hands in the opening puja
   launch_flight_s: 1.0          # rocket flight time before the burst
-  firework_hold_s: 2.5          # how long beat 7 plays before beat 8/9 can trigger
-  finale_min_s: 3.0             # finale plays at least this long before "still" can end it
+  firework_hold_s: 2.5          # how long the first firework plays before the finale can trigger
+  finale_min_s: 3.0             # finale plays at least this long before "still" starts the quiet end
   quiet_hold_s: 4.0
   quiet_fade_s: 2.0
   firework_target_frac: [0.5, 0.18]   # where the burst lands in projector space (x, y as fraction)
-  quiet_trail_fade_s: 1.2       # beat 10: leftover sparks and embers fade out this fast, leaving only the diya
+  quiet_trail_fade_s: 1.2       # quiet end: leftover sparks and embers fade out this fast, leaving only the diya
+  fallback_s: 14                # show mode: a beat whose gesture never comes moves on by itself after this (0 = wait forever)
+  lantern_lift: 1.6             # sky lanterns start this many palm sizes above the diya hand
+  puja_min_s: 2.0               # the rangoli holds at least this long before parting the hands scatters it
 
 render:
   brightness: 1.0               # global multiplier, applied last
@@ -109,7 +130,7 @@ render:
     quiet_glow: 1.9             # beat 10: palm pool + halo gain of the last diya
     relight_sparks: 90          # sparks puffed off the wick on relight
     relight_speed: [140, 460]
-    max: 24                     # max simultaneous flames / diyas
+    max: 48                     # max simultaneous flames / diyas (diya row + hand diyas + lanterns)
     flicker_height: 0.10        # height wobble amplitude
     flicker_sway: 0.22          # sideways lean amplitude (fraction of flame height)
     halo_radius: 1.3            # glow halo radius, in flame heights
@@ -125,7 +146,7 @@ render:
     smoke_gain: 1.1
     smoke_height: 3.2           # rise height in flame heights
     max_smoke: 16
-    max_glow: 160
+    max_glow: 400               # glow dots: 2 sparklers ~120 + chakri ~25 + anar + embers
     gust: 1.0                   # how much the occasional random gust ducks/leans the flame (0 = none)
     lean_k: 0.12                # flame leans against hand velocity: lean = -v/h * lean_k, in flame heights
     lean_max: 0.45
@@ -143,6 +164,159 @@ render:
     ember_life: [1.2, 2.4]
     ember_size: 0.085           # glow radius in flame heights
     ember_gain: 1.3
+  diwali:                       # hof/render/diwali.py: row of lamps, petals, aarti trail, chakri, anar, sky lanterns
+    diya_row:
+      y_frac: 0.9               # height of the row on the wall (fraction of frame)
+      x_range: [0.30, 0.70]     # first/last lamp: kept inside the middle of the frame so a 9:16 reel crop still sees the row
+      count: 7
+      interval: 0.22            # s between lamps lighting, left to right
+      size_px: 64               # palm-size equivalent: flame height = size * render.flame.size_palm_frac
+      ramp_s: 0.45              # a lit flame grows to full over this long
+      ignite_flare: 1.0         # flare of the tiny ignition pop (decays over flare_s)
+      flare_s: 0.5
+      fade_s: 1.0               # set_on() fades the whole row over this long
+      calm: 0.8                 # 0..1 steadier flame
+      glow: 0.85                # wall pool + halo gain
+      embers: 0.4
+      seed: 40.0                # flame seeds are seed + 1.7 * i
+      pop_radius: 1.6           # ignition pop glow radius, in flame heights
+      pop_gain: 0.4 
+    petals:
+      count: 36                 # default petals per shower (a gentle offering, not a blizzard)
+      duration: 2.5             # default spawn window, s
+      spread: 220               # px, horizontal half-width when a centre is given
+      max: 400
+      rose_frac: 0.16
+      marigold_len: [16, 24]    # petal half-length, px
+      rose_len: [22, 30] 
+      marigold_colors: [[1.0, 0.5, 0.05], [1.0, 0.62, 0.06], [1.0, 0.38, 0.03], [1.0, 0.76, 0.12]]   # saffron, orange, yellow
+      rose_colors: [[0.95, 0.1, 0.4], [0.8, 0.05, 0.3]]
+      fall: [170, 240]          # px/s terminal speed
+      sway: [30, 70]            # px amplitude of the side-to-side swing
+      sway_hz: [0.35, 0.8]
+      tumble: [1.5, 4.5]        # rad/s of the end-over-end flip
+      spin: [-0.6, 0.6]         # rad/s slow in-plane rotation
+      flat_drag: 0.5            # fall speed lost when the face is flat to the air (flutter brakes)
+      burst_speed: [60, 260]    # px/s outward kick when a centre is given
+      burst_drag: 2.0
+      gain: 1.0
+      halo: 0.22                # soft glow around each lit petal
+      fade_in_s: 0.6
+      bottom_fade: 0.12         # fraction of frame height over which petals fade out at the bottom
+    aarti:
+      trail_s: 1.2              # ribbon length in time
+      width: 15                 # ribbon half-width at the head, px
+      tail_width: 2.0
+      taper: 0.8                # exponent of the width falloff
+      gain: 1.25
+      color: [1.0, 0.62, 0.14]
+      hot: [1.0, 0.92, 0.62]
+      smooth: 2                 # moving-average passes
+      subdiv: 4                 # Catmull-Rom subdivisions per sample
+      max_points: 240
+      fade_s: 0.8               # stop(): ribbon fades out
+      min_step: 1.0             # px, samples closer than this are ignored
+      ring_radius: 260          # px, final radius of the loop-completed ripple
+      ring_s: 0.95
+      ring_width: 0.055         # fraction of ring_radius
+      ring_gain: 1.1
+      max_rings: 6
+    chakri:
+      radius_frac: 0.5          # wheel radius in palm sizes
+      jets: 3                   # spiral nozzles
+      omega: 22.0               # rad/s at full spin
+      spin_up_s: 0.9
+      spin_down_s: 1.3
+      jet_rate: 600             # sparks/s (all jets)
+      hiss_rate: 330            # fine sparks/s from random rim points
+      gain: 0.68                # spark brightness multiplier (they pile up on the trail layer)
+      tangent: 0.4             # spark speed as a fraction of rim speed
+      radial: 150               # px/s outward kick
+      spread: 90                # px/s random speed
+      life: [0.35, 0.85] 
+      hiss_life: [0.15, 0.4]
+      drag: 4.2
+      gravity: 220
+      size: 2.2
+      hiss_size: 1.1
+      stretch: 1.6
+      twinkle: 0.5
+      trail: 7                  # fading trail sparks per second per jet spark
+      trail_life: 0.22
+      color_period_s: 5.0       # gold -> green -> red -> gold
+      colors:                   # per phase: [hot, cool]
+        - [[1.0, 0.72, 0.2], [1.0, 0.36, 0.04]]
+        - [[0.45, 1.0, 0.35], [0.05, 0.8, 0.2]]
+        - [[1.0, 0.2, 0.1], [0.85, 0.03, 0.02]]
+      hiss_hot: [1.0, 0.95, 0.75]
+      hiss_cool: [1.0, 0.55, 0.15]
+      rim_dots: 12
+      rim_gain: 0.55
+      rim_radius: 0.07          # glow dot radius, fraction of wheel radius * 2
+      head_gain: 1.5
+      head_radius: 0.34         # in wheel radii
+      arc_dots: 4               # motion-blur dots trailing each jet
+      arc_step: 0.16            # rad between them
+      hub_gain: 0.0
+      halo_gain: 0.06 
+      halo_radius: 3.0          # in wheel radii
+    anar:
+      height_palm: 3.5          # apex of the fountain in palm sizes
+      cone_deg: 25.0            # full cone angle
+      gravity: 900
+      drag: 0.35
+      speed_lo: 0.4            # slowest spark as a fraction of the top speed (dense base)
+      rate: 800                 # sparks/s at full swell
+      speed_boost: 1.08         # launch speed vs the drag-free apex speed
+      gain: 0.26                # spark brightness multiplier (the fountain core piles up on the trail layer)
+      life: [1.1, 2.0]
+      size: [1.8, 2.8]
+      stretch: 1.4
+      twinkle: 0.7
+      silver_frac: 0.3
+      gold: [[1.0, 0.9, 0.5], [1.0, 0.4, 0.06]]
+      silver: [[1.0, 1.0, 1.0], [0.62, 0.74, 1.0]]
+      trail_frac: 0.15          # fraction of sparks that drop fading trail sparks
+      trail: 9
+      trail_life: 0.3
+      crackle_rate: 7           # bursts/s at full swell
+      crackle_count: [8, 16]
+      crackle_speed: [90, 240]
+      crackle_life: [0.1, 0.3]
+      crackle_size: 1.7
+      fizz_s: 0.25              # ignition: weak fizz first
+      fizz_level: 0.12
+      whoosh_s: 0.4             # then ramp to full
+      die_s: 0.6
+      swell_hz: [0.7, 2.3, 7.0] # brightness swell/flicker components
+      swell_amp: [0.12, 0.1, 0.08]
+      mouth_gain: 0.45 
+      mouth_radius: 0.26        # pot mouth glow, in palm sizes
+      spill_gain: 0.55
+      spill_radius: 2.2
+    lanterns:
+      count: 7
+      height: [95, 140]         # px
+      width_frac: 0.62
+      rise: [70, 115]            # px/s cruising speed
+      lift_s: 1.6               # ease-in to cruising speed
+      spread: 200               # px, initial horizontal scatter
+      drift: [-14, 14]          # px/s lateral wind
+      sway: [10, 26]            # px amplitude
+      sway_hz: [0.12, 0.3]
+      tilt: 0.1                 # rad
+      stagger_s: 0.35
+      fade_frac: 0.3            # fade over the top fraction of the frame
+      shrink: 0.35              # lanterns shrink this much as they climb (distance)
+      grow_s: 0.8
+      max: 40
+      gain: 1.0
+      halo: 0.35
+      halo_r: 1.8               # halo radius in lantern heights
+      edge_color: [0.95, 0.2, 0.04]
+      mid_color: [1.0, 0.55, 0.12]
+      flame_color: [1.0, 0.9, 0.55]
+      flicker: 0.12
   sparkler:
     rate: 380                   # sparks per second per sparkler
     speed: 600                  # px/s

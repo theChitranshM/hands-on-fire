@@ -203,8 +203,14 @@ class Recorder:
         proj, cam, t, take, beat, wall = item
         img = self._compose(proj, cam, take, beat, wall)
         if self._vw is not None:
-            self._vw.write(img)
-            self._vw_n += 1
+            # write by wall-clock time: frames dropped under load are filled with repeats, so takes play in real time
+            if self._vw_t0 is None:
+                self._vw_t0 = wall
+            fps = self.cfg.recorder.record_fps
+            target = min(int((wall - self._vw_t0) * fps) + 1, self._vw_n + int(fps * 2))
+            while self._vw_n < target:
+                self._vw.write(img)
+                self._vw_n += 1
         self._ring.append(cv2.imencode(".jpg", img, self._enc)[1])
 
     def _command(self, cmd):
@@ -218,7 +224,7 @@ class Recorder:
             self._vw_final = cmd[1]
             self._vw_raw = cmd[1] + ".raw.mp4"
             self._vw = self._open_vw(self._vw_raw)
-            self._vw_n = 0
+            self._vw_n, self._vw_t0 = 0, None
         elif cmd[0] == "end":
             self._drain_frames()
             self._close_vw()

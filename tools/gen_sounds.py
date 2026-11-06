@@ -157,8 +157,152 @@ def bloom(cfg, sr):
     return _reverb(out, sr, 0.4, 0.8)
 
 
+# brass hand-bell partial ratios (inharmonic) with relative amps and decay multipliers
+_BELL = [(1.0, 1.0, 1.0), (2.01, 0.55, 0.8), (2.76, 0.6, 0.7), (4.18, 0.4, 0.5),
+         (5.43, 0.3, 0.38), (6.8, 0.2, 0.28), (8.9, 0.12, 0.2), (11.3, 0.07, 0.14)]
+
+
+def _bell_strike(r, n, sr, base, decay, bright=1.0):
+    """One brass bell strike: detuned partial pairs (slow beating), quick attack, metallic click."""
+    t = np.arange(n) / sr
+    out = np.zeros(n)
+    for ratio, amp, dm in _BELL:
+        f = base * ratio * (1 + r.uniform(-0.004, 0.004))
+        e = _env(n, sr, 0.0015, decay * dm)
+        beat = r.uniform(1.5, 4.5)                          # Hz offset between the twin partials
+        a = amp * (bright if ratio > 3 else 1.0)
+        out += a * e * (np.sin(2 * np.pi * f * t + r.uniform(0, 6.28)) + 0.8 * np.sin(2 * np.pi * (f + beat) * t + r.uniform(0, 6.28)))
+    out += 0.5 * _noise(r, n, 3000, 9000, sr) * _env(n, sr, 0.0005, 0.008)   # clapper click
+    return out
+
+
+def bell(cfg, sr):
+    r = _rng(cfg, 9)
+    n = int(3.0 * sr)
+    return _reverb(_bell_strike(r, n, sr, 1650.0, 1.1), sr, 0.25, 0.6)
+
+
+def bell_ring(cfg, sr):
+    r = _rng(cfg, 10)
+    dur = 2.5
+    n = int(dur * sr)
+    out = np.zeros(n)
+    t, k = 0.0, 0
+    while t < dur - 0.1:
+        L = int(0.9 * sr)
+        base = 1650.0 * (1 + r.uniform(-0.01, 0.01))
+        strike = _bell_strike(r, L, sr, base, 0.35, bright=1.1) * r.uniform(0.55, 1.0)
+        i = int(t * sr)
+        m = min(L, n - i)
+        out[i:i + m] += strike[:m]
+        t += r.uniform(1 / 8.0, 1 / 6.0)                    # 6-8 strikes per second, uneven
+        k += 1
+    u = np.arange(n) / n
+    out *= np.minimum(np.arange(n) / (0.03 * sr), 1) * (1 - u ** 2.5)    # swing in, fade out
+    return _reverb(out, sr, 0.25, 0.6)
+
+
+def match(cfg, sr):
+    r = _rng(cfg, 11)
+    n = int(0.6 * sr)
+    t = np.arange(n) / sr
+    ns = int(0.17 * sr)                                    # scratch: rough, stuttering friction
+    ts = np.arange(ns) / sr
+    rough = 0.5 + 0.5 * np.sign(np.sin(2 * np.pi * 70 * ts + 3 * _noise(r, ns, None, 40, sr) / 6))
+    scratch = _noise(r, ns, 1800, 9000, sr) * rough * np.minimum(ts / 0.01, 1) * (1 - (ts / ts[-1]) ** 3) * 0.7
+    x = np.zeros(n)
+    x[:ns] += scratch
+    on = 0.15                                              # flare: soft whoosh as the head catches
+    u = np.clip((t - on) / 0.45, 0, None)
+    fl = _lp(r.standard_normal(n), 0.03 + 0.25 * np.exp(-u / 0.12)) * np.minimum(u / 0.04, 1) * np.exp(-u / 0.17) * (t > on)
+    x += fl * 3.0
+    x += 0.25 * _noise(r, n, 3500, 9000, sr) * np.minimum(u / 0.02, 1) * np.exp(-u / 0.08) * (t > on)
+    for _ in range(9):                                     # sparse little pops
+        i = int(r.uniform(0.16, 0.45) * sr)
+        L = int(r.uniform(0.001, 0.003) * sr)
+        x[i:i + L] += r.standard_normal(L) * np.exp(-np.arange(L) / (L / 3)) * r.uniform(0.2, 0.5)
+    return _reverb(x, sr, 0.12, 0.2)
+
+
+def _pops(r, out, n, count, lo, hi, gain):
+    """Circular crackle pops (wrap around the end so loops stay seamless)."""
+    for _ in range(count):
+        i = int(r.integers(0, n))
+        L = int(r.uniform(lo, hi) * 44100)
+        pop = np.diff(np.concatenate([[0], r.standard_normal(L) * np.exp(-np.arange(L) / (L / 4)) * r.uniform(0.2, 1.0)]))
+        out[(i + np.arange(L)) % n] += pop * gain
+
+
+def anar_loop(cfg, sr):
+    r = _rng(cfg, 12)
+    n = 2 * sr
+    sl = _noise(r, n, None, 12, sr)
+    sl /= np.std(sl)
+    roar = _noise(r, n, 700, 8000, sr) * (0.8 + 0.2 * np.tanh(sl))
+    air = _noise(r, n, 5000, 14000, sr) * (0.7 + 0.25 * np.tanh(sl * 0.8))
+    low = _noise(r, n, 120, 500, sr) * 0.5
+    out = roar / np.std(roar) * 0.55 + air / np.std(air) * 0.5 + low / np.std(low) * 0.18
+    _pops(r, out, n, 420, 0.0006, 0.003, 1.3)
+    out -= np.mean(out)
+    return np.tanh(out / np.std(out) * 0.5)
+
+
+def chakri_loop(cfg, sr):
+    r = _rng(cfg, 13)
+    n = 2 * sr
+    t = np.arange(n) / sr
+    wob = _noise(r, n, None, 3, sr)
+    wob = wob / np.std(wob) * 0.4                          # circular, so phase returns to start
+    whirr = 0.5 + 0.5 * np.cos(2 * np.pi * 15 * t + wob)   # 15 Hz = 30 whole cycles in 2 s
+    hiss = _noise(r, n, 2500, 11000, sr)
+    body = _noise(r, n, 300, 1800, sr)
+    out = hiss / np.std(hiss) * (0.25 + 0.75 * whirr ** 1.5) * 0.5
+    out += body / np.std(body) * (0.2 + 0.8 * whirr) * 0.3
+    out += 0.12 * np.sin(2 * np.pi * 240 * t + 4 * np.sin(2 * np.pi * 15 * t)) * whirr   # thin spin buzz
+    _pops(r, out, n, 200, 0.0008, 0.004, 1.2)
+    out -= np.mean(out)
+    return np.tanh(out / np.std(out) * 0.45)
+
+
+def lantern(cfg, sr):
+    r = _rng(cfg, 14)
+    n = int(2.5 * sr)
+    t = np.arange(n) / sr
+    sw = np.sin(np.pi * t / t[-1]) ** 2                    # slow in, slow out
+    air = _noise(r, n, 250, 1400, sr) * sw
+    air += 0.25 * _noise(r, n, 1800, 5000, sr) * sw ** 2
+    pad = np.zeros(n)
+    for f, a in [(110.0, 1.0), (164.8, 0.6), (220.0, 0.5), (277.2, 0.25)]:
+        for d in (-0.5, 0.5):
+            pad += a * np.sin(2 * np.pi * (f + d) * t + r.uniform(0, 6.28))
+    pad *= np.sin(np.pi * t / t[-1]) ** 1.5 * (0.85 + 0.15 * np.sin(2 * np.pi * 0.7 * t))
+    x = air / np.std(air) * 0.5 + pad / np.max(np.abs(pad)) * 0.9
+    x = _lp(x, 0.12) * sw ** 0.5
+    return _reverb(x, sr, 0.3, 0.6)
+
+
+def shankh(cfg, sr):
+    r = _rng(cfg, 15)
+    n = int(2.5 * sr)
+    t = np.arange(n) / sr
+    u = t / t[-1]
+    f0 = 345 * (1 - 0.1 * np.exp(-t / 0.12)) * (1 + 0.006 * np.sin(2 * np.pi * 5.2 * t) * np.minimum(t / 0.8, 1))
+    ph = 2 * np.pi * np.cumsum(f0) / sr
+    amp = np.minimum(t / 0.4, 1) ** 1.5 * (1 + 0.15 * np.sin(np.pi * u)) * np.exp(-np.maximum(t - 1.5, 0) / 0.35)
+    tone = np.zeros(n)
+    for k in range(1, 10):
+        tone += np.sin(k * ph + r.uniform(0, 6.28)) * (1.0 / k ** 1.05) * (1.4 if k in (2, 3) else 1.0)
+    breath = _noise(r, n, 500, 3500, sr) * (0.5 + 0.5 * np.sin(2 * np.pi * 7 * t) ** 2 * 0.2) * 0.25
+    x = (tone + breath * 1.2) * amp
+    x = _lp(x, 0.45)
+    return _reverb(x, sr, 0.3, 0.9)
+
+
 SOUNDS = dict(ignite=ignite, snuff=snuff, sparkler_loop=sparkler_loop, whoosh=whoosh,
-              boom=boom, crackle=crackle, chime=chime, bloom=bloom)
+              boom=boom, crackle=crackle, chime=chime, bloom=bloom, bell=bell, bell_ring=bell_ring,
+              match=match, anar_loop=anar_loop, chakri_loop=chakri_loop, lantern=lantern, shankh=shankh)
+
+LEVEL_DB = dict(lantern=-9.0, bell_ring=-1.0)           # per-sound trim after peak normalisation
 
 
 def write_wav(p, x, sr):
@@ -179,10 +323,10 @@ def generate(cfg, only=None, force=False):
         if (only and name not in only) or (os.path.exists(p) and not force):
             continue
         x = fn(cfg, sr)
-        if name != "sparkler_loop":                         # loops stay circular; fade ends of one-shots
+        if not name.endswith("_loop"):                         # loops stay circular; fade ends of one-shots
             f = int(0.01 * sr)
             x[-f:] *= np.linspace(1, 0, f)
-        write_wav(p, _norm(x, cfg.audio.peak_dbfs), sr)
+        write_wav(p, _norm(x, cfg.audio.peak_dbfs + LEVEL_DB.get(name, 0.0)), sr)
         done.append(name)
     return done
 
