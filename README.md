@@ -24,7 +24,7 @@ It all runs live, in one take, with no editing: a MacBook camera tracks your han
 ## Install (5 minutes)
 
 ```bash
-git clone <this-repo-url> hands-on-fire
+git clone https://github.com/theChitranshM/hands-on-fire.git
 cd hands-on-fire
 ./setup.sh
 ```
